@@ -1,0 +1,169 @@
+{
+  "schema": 1,
+  "review_date": "2026-11-16",
+  "source_thread": "01a1da02-1643-7502-8fda-73bcae46516e",
+  "precedence": "Later explicit owner corrections override older schematic labels; measurements are not inferred from nominal components.",
+  "images": [
+    {
+      "source_turn": "01a1df1c-0798-7281-a63b-56791c5d8257",
+      "file": "codex-clipboard-27602ea6-a5c3-47b9-91a6-4c55a4986327.png"
+    },
+    {
+      "source_turn": "01a1df1c-0798-7281-a63b-56791c5d8257",
+      "file": "codex-clipboard-7f1785cf-5f7b-4d12-aa82-5a3849f3a73e.png"
+    },
+    {
+      "source_turn": "01a1db5d-aef8-77f3-99bb-1395e084e639",
+      "file": "codex-clipboard-db0effcc-3c20-454d-8d7a-f3067db9779e.png"
+    },
+    {
+      "source_turn": "01a1db5d-aef8-77f3-99bb-1395e084e639",
+      "file": "codex-clipboard-b670c207-d3a8-48cd-a76d-dbed0f6e3a5e.png"
+    },
+    {
+      "source_turn": "01a1db5c-48be-7163-b1de-58b2a6055d9f",
+      "file": "codex-clipboard-7efc1e31-ea2f-4bf5-82ad-23dabd8a7846.png"
+    },
+    {
+      "source_turn": "01a1db5c-48be-7163-b1de-58b2a6055d9f",
+      "file": "codex-clipboard-8458182b-87a5-47ff-96dc-4e358f27cb5f.png"
+    },
+    {
+      "source_turn": "01a1db59-61e2-79f0-9969-1a6d5b26d703",
+      "file": "codex-clipboard-d43d86ec-d213-460a-8581-c9f46b22ab30.png"
+    },
+    {
+      "source_turn": "01a1db59-61e2-79f0-9969-1a6d5b26d703",
+      "file": "codex-clipboard-cb31b80e-2d02-4512-95b1-9ef5f859faed.png"
+    },
+    {
+      "source_turn": "01a1db51-9d4a-76b1-bf7e-361213d9b960",
+      "file": "codex-clipboard-53fb30ed-a6cb-4167-bfc4-dfd9562decd3.png"
+    }
+  ],
+  "resolved": {
+    "ntc": {
+      "model": "MF52A103F3950(A1)",
+      "r25_ohms": 10000,
+      "beta": 3950,
+      "pullup_ohms": 3300,
+      "source_turn": "01a1e3af-e667-78f2-bbea-c1da146cdac9",
+      "note": "Owner explicitly confirmed installed 3.3k; overrides older R32=4.7k drawing. Nominal conversion, not measured CO calibration."
+    },
+    "thermal": {
+      "flame": "MAX6675 TC1",
+      "sample_cooler": "MAX6675 TC2",
+      "release_condition": "strictly below 40 C",
+      "source_turn": "01a1df1c-0798-7281-a63b-56791c5d8257"
+    },
+    "sample": {
+      "outlet": "free outlet",
+      "source_turn": "01a1df1e-a09c-79b3-bdf0-10e01fdb8589"
+    },
+    "damper": {
+      "hall": "PB12 active LOW",
+      "step": "PC8",
+      "dir": "PC9 HIGH toward EXHAUST",
+      "enable": "PC6 active LOW",
+      "shared_motor": true,
+      "pulses_per_90_deg": 800,
+      "travel_pulses": 1600,
+      "reference": "Operator physically identifies EXHAUST; Hall alone cannot identify endpoint at boot",
+      "software_timeout_ms": 15000,
+      "nominal_command_duration_ms": 4000,
+      "note": "4000ms derives from 1600 pulses / (30 driver RPM * 800 pulses/revolution / 60); not measured damper speed."
+    },
+    "analog_circuit": {
+      "sig": "PA2",
+      "reference": "PA3",
+      "ntc": "PA4",
+      "optional_mixer_ntc": "PA5",
+      "feedback_ohms": 10000000,
+      "feedback_capacitance_nf": 100,
+      "nominal_rc_seconds": 1,
+      "reference_divider_upper_ohms": 100000,
+      "reference_divider_lower_ohms": 10000,
+      "reference_ratio": "VCC/11",
+      "note": "Nominal schematic values only; cannot infer sensor-specific zero/span or installed tolerance."
+    },
+    "fan": {
+      "output": "PA8",
+      "zero_cross": "PA9",
+      "mains_hz": 50,
+      "pulses_per_cycle": 2,
+      "reported_pulse_width_ms": 1,
+      "nominal_half_cycle_ms": 10,
+      "timer_tick_us": 30,
+      "triac": "BTA16-800B",
+      "opto": "MOC3021M",
+      "note": "Owner confirmed PA8 controls fan. Phase delay and airflow table still require measurement."
+    },
+    "communications": {
+      "planned_transceiver": "THVD1450DR",
+      "uart": "USART1 PB6 TX / PB7 RX",
+      "connected": false,
+      "protocol": "Board master Modbus RTU 19200 8E1; PLC=1, lux=2, debug=247",
+      "source_turns": [
+        "01a1df47-19c8-73e2-b4a5-8272d93d64c0",
+        "01a1e3af-e667-78f2-bbea-c1da146cdac9"
+      ],
+      "note": "Later disconnected status overrides planned hardware; protocol is the board contract, not proof of deployed slave firmware."
+    },
+    "external_supervisor": {
+      "owner_reports_present": true,
+      "owner_confirms_cutoff_overrides_q7": true,
+      "cutoff_evidence": "Current-chat owner answer: external circuit can remove valve-coil power while Q7 remains ON. This is a reported hardware capability, not measured feedback to STM32.",
+      "communicates_with_stm32": false,
+      "pressure_switch_connected_to_stm32": false,
+      "source_turns": [
+        "01a1e501-16cd-7560-9bb0-5ce50f84ab69",
+        "01a1e585-6db5-7570-b79a-68f4c0d3babf"
+      ],
+      "note": "Known absence of feedback connection is an integration gap, not an unknown GPIO value."
+    },
+    "flame": {
+      "pin": "PA1",
+      "active": "HIGH",
+      "reported_fall_delay_ms": 2000,
+      "software_extra_delay_ms": 0
+    },
+    "timing": {
+      "owner_purge_ms": 30000,
+      "owner_ignition_ms": 5000,
+      "owner_postpurge_ms": 60000,
+      "software_defaults_interpurge_ms": 30000,
+      "software_defaults_flame_stable_ms": 500,
+      "source_turns": [
+        "01a1e501-16cd-7560-9bb0-5ce50f84ab69",
+        "01a1e588-42fb-77a3-8e5e-27696fc1751c"
+      ],
+      "note": "Owner settings and authorized software defaults; not measurements or independent approval of the burner."
+    },
+    "software": {
+      "adc": "HmiMonitorIo configures six-channel 20Hz DMA, overriding initial adc.c setup",
+      "buzzer": "TIM4; TIM1 reserved for fan/zero-cross",
+      "co_freshness_ms": 500,
+      "mixer_ntc": "Optional; not used for sample cooling or combustion routing"
+    }
+  },
+  "measurements_required": [
+    "CO zero/span/polarity across reference concentrations and temperature; verify usable analog range and clipping.",
+    "Fan start/run command versus actual airflow/RPM, airflow proof time, PA9 phase offset and PA8 gate behavior.",
+    "Sample fill/transfer/CO response, cooling below 40 C, flame and CO settling after air adjustment.",
+    "Damper arrival/Hall repeatability, stall handling and actual unpowered behavior.",
+    "Shutdown response of actual valve/ignition and independent interlock path during fault/reset/power interruption."
+  ],
+  "integration_gaps": [
+    "No STM32 acquisition path for external safety/airflow/fuel-off/ignition-off/fan-stop proofs.",
+    "RS485 transceiver disconnected; AUTO daylight source unavailable until connected."
+  ],
+  "design_decisions": [
+    "CO acceptance/adjust/trip limits and admissible uncertainty.",
+    "Equipment-specific purge requirement and fault ventilation policy.",
+    "Initial air and bounded adjustment policy after measured fan/combustion response."
+  ],
+  "optional": [
+    "Mixer NTC conversion is not required for TC2-controlled sample cooling.",
+    "PLC/RS485 is not required for local MANUAL operation; real daylight is required for AUTO."
+  ]
+}

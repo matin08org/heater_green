@@ -1,0 +1,492 @@
+{
+    "schema":  1,
+    "display":  {
+                    "width":  480,
+                    "height":  320,
+                    "orientation":  "landscape"
+                },
+    "pages":  [
+                  {
+                      "id":  "home",
+                      "background":  "0841",
+                      "widgets":  [
+                                      {
+                                          "id":  "header",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  3,
+                                          "palette":  [
+                                                          "0149",
+                                                          "1AF0",
+                                                          "F7DF",
+                                                          "76CA"
+                                                      ],
+                                          "image":  "panels/header.png",
+                                          "x":  4,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "mode_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  52,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/mode_panel.png",
+                                          "x":  8,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "manual_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  76,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/manual_frame.png",
+                                          "x":  14,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "auto_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  76,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/auto_frame.png",
+                                          "x":  99,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "state_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  52,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/state_panel.png",
+                                          "x":  196,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "run_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  76,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/run_frame.png",
+                                          "x":  200,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "stop_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  76,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/stop_frame.png",
+                                          "x":  336,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "temperature_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  116,
+                                          "palette":  [
+                                                          "00E6",
+                                                          "22AE",
+                                                          "CF5E",
+                                                          "6E7B"
+                                                      ],
+                                          "image":  "panels/temperature_panel.png",
+                                          "x":  8,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "co_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  144,
+                                          "palette":  [
+                                                          "00A5",
+                                                          "2415",
+                                                          "EFBF",
+                                                          "FD66"
+                                                      ],
+                                          "image":  "panels/co_panel.png",
+                                          "x":  8,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "co_value_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  177,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/co_value_frame.png",
+                                          "x":  18,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "co_quality_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  183,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/co_quality_frame.png",
+                                          "x":  145,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "damper_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  144,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/damper_panel.png",
+                                          "x":  234,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "greenhouse_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  168,
+                                          "palette":  [
+                                                          "01A4",
+                                                          "34EC",
+                                                          "E7FE",
+                                                          "87AF"
+                                                      ],
+                                          "image":  "panels/greenhouse_frame.png",
+                                          "x":  242,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "exhaust_frame",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  168,
+                                          "palette":  [
+                                                          "0928",
+                                                          "53F4",
+                                                          "E79F",
+                                                          "C6FE"
+                                                      ],
+                                          "image":  "panels/exhaust_frame.png",
+                                          "x":  357,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "target_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  246,
+                                          "palette":  [
+                                                          "0169",
+                                                          "34D9",
+                                                          "EFBF",
+                                                          "669E"
+                                                      ],
+                                          "image":  "panels/target_panel.png",
+                                          "x":  8,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "co2_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  246,
+                                          "palette":  [
+                                                          "0166",
+                                                          "242E",
+                                                          "EFDE",
+                                                          "7F8E"
+                                                      ],
+                                          "image":  "panels/co2_panel.png",
+                                          "x":  234,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "id":  "footer_panel",
+                                          "source_colors":  [
+                                                                "000000",
+                                                                "555555",
+                                                                "AAAAAA",
+                                                                "FFFFFF"
+                                                            ],
+                                          "y":  304,
+                                          "palette":  [
+                                                          "00C6",
+                                                          "22F0",
+                                                          "EFBF",
+                                                          "5E7D"
+                                                      ],
+                                          "image":  "panels/footer_panel.png",
+                                          "x":  0,
+                                          "format":  "i2blend4"
+                                      },
+                                      {
+                                          "x":  16,
+                                          "binding":  "MODE_MANUAL",
+                                          "id":  "manual",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  78,
+                                          "radius":  5,
+                                          "width":  78,
+                                          "height":  27,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "x":  101,
+                                          "binding":  "MODE_AUTO",
+                                          "id":  "auto",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  78,
+                                          "radius":  5,
+                                          "width":  78,
+                                          "height":  27,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "x":  202,
+                                          "binding":  "RUN_STATE",
+                                          "id":  "run",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  78,
+                                          "radius":  5,
+                                          "width":  126,
+                                          "height":  27,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "x":  338,
+                                          "binding":  "STOP_STATE",
+                                          "id":  "stop",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  78,
+                                          "radius":  5,
+                                          "width":  126,
+                                          "height":  27,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "id":  "tc1",
+                                          "color":  "E73F",
+                                          "width":  131,
+                                          "y":  117,
+                                          "x":  78,
+                                          "binding":  "TC1",
+                                          "height":  20
+                                      },
+                                      {
+                                          "id":  "tc2",
+                                          "color":  "E73F",
+                                          "width":  150,
+                                          "y":  117,
+                                          "x":  313,
+                                          "binding":  "TC2",
+                                          "height":  20
+                                      },
+                                      {
+                                          "id":  "co",
+                                          "y":  180,
+                                          "width":  85,
+                                          "align":  "center",
+                                          "height":  31,
+                                          "x":  22,
+                                          "binding":  "CO_VALUE",
+                                          "font":  "value"
+                                      },
+                                      {
+                                          "x":  148,
+                                          "binding":  "CO_STATUS",
+                                          "id":  "co_quality",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  185,
+                                          "radius":  5,
+                                          "width":  66,
+                                          "height":  24,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "x":  247,
+                                          "binding":  "GREENHOUSE",
+                                          "id":  "greenhouse",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  210,
+                                          "radius":  5,
+                                          "width":  101,
+                                          "height":  21,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "x":  361,
+                                          "binding":  "EXHAUST",
+                                          "id":  "exhaust",
+                                          "type":  "badge",
+                                          "align":  "center",
+                                          "y":  210,
+                                          "radius":  5,
+                                          "width":  99,
+                                          "height":  21,
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "y":  268,
+                                          "binding":  "TARGET_VALUE",
+                                          "id":  "target",
+                                          "x":  47,
+                                          "align":  "center",
+                                          "color":  "FFFF",
+                                          "width":  123,
+                                          "height":  31,
+                                          "font":  "value"
+                                      },
+                                      {
+                                          "id":  "co2",
+                                          "y":  268,
+                                          "width":  119,
+                                          "align":  "center",
+                                          "height":  31,
+                                          "x":  273,
+                                          "binding":  "CO2_VALUE",
+                                          "font":  "value"
+                                      },
+                                      {
+                                          "id":  "co2_status",
+                                          "y":  250,
+                                          "width":  61,
+                                          "align":  "right",
+                                          "height":  15,
+                                          "x":  405,
+                                          "binding":  "CO2_STATUS",
+                                          "font":  "small"
+                                      },
+                                      {
+                                          "id":  "source",
+                                          "y":  305,
+                                          "width":  295,
+                                          "color":  "94F7",
+                                          "height":  14,
+                                          "x":  10,
+                                          "binding":  "SOURCE",
+                                          "font":  "small"
+                                      }
+                                  ]
+                  }
+              ]
+}

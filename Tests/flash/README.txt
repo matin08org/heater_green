@@ -1,0 +1,1 @@
+Flash verification host regression: run .\Tests\flash\test.ps1 from the repository root. Tests Flash-Verify.ps1 with an in-memory device; no board connection or programming. The current hardware entry point is Program-Final.ps1, which programs matching internal CPU and external assets after validating the build manifest.

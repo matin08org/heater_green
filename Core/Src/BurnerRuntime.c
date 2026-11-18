@@ -6,9 +6,15 @@
 #include "stm32f4xx_ll_adc.h"
 #include "BoardBus.h"
 #include "BoardActuation.h"
+#include "StartOverride.h"
 #include <string.h>
 static BurnerControl burner;
-static BurnerInputs inputs;
+static BurnerInputs inputs;      /* what the sequencer sees (effective) */
+static BurnerInputs real_inputs; /* measured only; used for the warning list */
+static BurnerConfig effective_config;
+static uint32_t override_placeholders;
+/* No MCU acquisition path exists for airflow/interlock/detector/off-proofs. */
+static const bool proof_inputs_connected=false;
 static BurnerAppSnapshot published;
 static BoardAnalogValues analog_values;
 static uint32_t analog_ms,analog_sequence;
@@ -18,11 +24,22 @@ static uint32_t StartBlockers(const BoardActuationSnapshot *act,uint32_t now)
 {
     /* Existing board has PA1 flame and Hall only. External supervisor and
      * pressure switch have no MCU connection. This is a capability fact. */
-    const BurnerHardwareStatus hardware={.proof_inputs_connected=false,
+    const BurnerHardwareStatus hardware={.proof_inputs_connected=proof_inputs_connected,
         .fan_calibrated=act->fan_calibrated,.fan_sync=act->fan_sync,
         .damper_referenced=act->referenced,.actuation_fault=act->fault,
         .co_calibrated=board_analog_calibration.calibrated};
+#if BURNER_START_OVERRIDE
+    /* Warnings describe the real state: profile as generated, measured inputs. */
+    BurnerControl view=burner;view.config=board_burner_profile;
+    return Burner_StartBlockers(&view,&real_inputs,&hardware,now);
+#else
     return Burner_StartBlockers(&burner,&inputs,&hardware,now);
+#endif
+}
+static void LogPlaceholders(uint32_t now)
+{
+    for(unsigned bit=0;bit<SO_PH_COUNT;++bit)if(override_placeholders&(1UL<<bit))
+        DiagLog_Write(now,DIAG_WARN,"OVERRIDE","placeholder %s",StartOverride_PlaceholderText(bit));
 }
 static void Publish(void)
 {
@@ -47,9 +64,20 @@ void BurnerApp_Init(void)
 {
     BoardActuation_Init();
     auto_armed=false;
+#if BURNER_START_OVERRIDE
+    override_placeholders=StartOverride_Config(&board_burner_profile,&effective_config);
+    Burner_Init(&burner,&effective_config,HAL_GetTick());
+#else
     Burner_Init(&burner,&board_burner_profile,HAL_GetTick());
-    memset(&inputs,0,sizeof(inputs));Publish();
+#endif
+    memset(&inputs,0,sizeof(inputs));memset(&real_inputs,0,sizeof(real_inputs));Publish();
+#if BURNER_START_OVERRIDE
+    DiagLog_Write(HAL_GetTick(),DIAG_WARN,"CONTROL","START OVERRIDE ACTIVE: START is not blocked by commissioning/proof checks (shown as warnings)");
+    DiagLog_Write(HAL_GetTick(),DIAG_WARN,"CONTROL","No airflow/interlock/detector proofs: assumed from fan request+sync. Independent hardware cutoff is the only fuel isolation");
+    LogPlaceholders(HAL_GetTick());
+#else
     DiagLog_Write(HAL_GetTick(),DIAG_WARN,"CONTROL","Unified burner supervisor active; physical outputs inhibited until commissioning");
+#endif
 }
 void BurnerApp_ServiceInputs(const MAX6675_Snapshot_t *tc,const CO2_Snapshot *co2)
 {
@@ -74,10 +102,18 @@ void BurnerApp_ServiceInputs(const MAX6675_Snapshot_t *tc,const CO2_Snapshot *co
     inputs.co_valid=analog_values.co_valid;inputs.co_ppm=analog_values.co_ppm;inputs.co_sample_ms=analog_ms;
     inputs.co2_valid=co2&&co2->valid;inputs.co2_ppm=co2?co2->ppm:0;
     BoardBusSnapshot bus;BoardBus_Get(&bus);inputs.daylight_valid=bus.lux_valid;inputs.daylight=bus.daylight;
+    real_inputs=inputs;
+#if BURNER_START_OVERRIDE
+    StartOverride_Inputs(&real_inputs,&burner.out,act.fan_sync,proof_inputs_connected,&inputs);
+#endif
     /* Unknown safety/airflow/daylight/position proof stays invalid; GPIO level,
      * commanded position and a queued relay image cannot fabricate feedback. */
     BurnerState old=burner.state;BurnerSampleState sample=burner.sample_state;uint8_t air=burner.out.air_percent;
-    if(StartBlockers(&act,now)==0U&&Burner_AutoStartRequested(&burner,&inputs,now,auto_armed)) {
+    uint32_t auto_blockers=StartBlockers(&act,now);
+#if BURNER_START_OVERRIDE
+    auto_blockers&=BURNER_BLOCK_BUSY; /* only a running/locked cycle prevents a new one */
+#endif
+    if(auto_blockers==0U&&Burner_AutoStartRequested(&burner,&inputs,now,auto_armed)) {
         last_start=Burner_RequestStart(&burner,BURNER_AUTO,&inputs,now);
         DiagLog_Write(now,DIAG_INFO,"AUTO","Demand START result=%u CO2=%u target=%u",last_start,inputs.co2_ppm,burner.co2_target_ppm);
     }
@@ -104,6 +140,13 @@ BurnerCommandResult BurnerApp_Start(BurnerSource source)
 {
     BoardActuationSnapshot act;BoardActuation_Get(&act);
     uint32_t blockers=StartBlockers(&act,HAL_GetTick());
+#if BURNER_START_OVERRIDE
+    if(blockers&&!(blockers&BURNER_BLOCK_BUSY)) {
+        DiagLog_Write(HAL_GetTick(),DIAG_WARN,"OVERRIDE","START proceeds despite blockers=%08lx: %s",(unsigned long)blockers,Burner_StartBlockText(blockers));
+        LogPlaceholders(HAL_GetTick());
+        blockers=0U;
+    }
+#endif
     if(blockers) {
         last_start=(blockers&BURNER_BLOCK_BUSY)?BURNER_COMMAND_BUSY:
             (blockers&(BURNER_BLOCK_PARAMETERS|BURNER_BLOCK_COMMISSIONING|BURNER_BLOCK_PROOF_CONNECTION))?

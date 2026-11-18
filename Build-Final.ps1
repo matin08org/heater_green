@@ -22,6 +22,7 @@ try {
   & (Join-Path $taskRoot 'Tools/Hmi/Preview-Rgb565.ps1') -InputFile (Join-Path $taskOut 'home-preview.rgb565.running') -OutputPng (Join-Path $taskRelease 'home-running-preview.png')
   & (Join-Path $taskRoot 'Tools/Hmi/Preview-Rgb565.ps1') -InputFile (Join-Path $taskOut 'home-preview.rgb565.palette') -OutputPng (Join-Path $taskRelease 'home-palette-preview.png')
   & (Join-Path $taskRoot 'Tests/burner/run.ps1') -Compiler $HostCompiler
+  & (Join-Path $taskRoot 'Tests/startoverride/run.ps1') -Compiler $HostCompiler
   & (Join-Path $taskRoot 'Tests/ui/run.ps1') -Compiler $HostCompiler
   & (Join-Path $taskRoot 'Tests/max6675/run.ps1') -Compiler $HostCompiler
   & (Join-Path $taskRoot 'Tests/radio/run.ps1') -Compiler $HostCompiler

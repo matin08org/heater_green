@@ -26,7 +26,7 @@ $taskSources+=@('HmiTypes','HmiImage','HmiText','HmiStream','HmiDiag','HmiDiagDa
 $taskSources+='Libraries/Hmi/platform/HmiSt7796.c'
 $taskSources+='Core/Startup/startup_stm32f412retx.s'
 if($FinalApplication) {
- $taskSources+=@('Core/Src/BoardActuation.c','Core/Src/BurnerRuntime.c','Core/Src/BurnerControl.c','Core/Src/CombustionCycle.c','Core/Src/SensorMath.c','Core/Src/UiNavigation.c','Core/Src/RtuMaster.c','Core/Src/BoardBus.c','Libraries/Hmi/src/HmiPages.c','Libraries/Hmi/src/HmiHome.c',
+ $taskSources+=@('Core/Src/BoardActuation.c','Core/Src/BurnerRuntime.c','Core/Src/StartOverride.c','Core/Src/BurnerControl.c','Core/Src/CombustionCycle.c','Core/Src/SensorMath.c','Core/Src/UiNavigation.c','Core/Src/RtuMaster.c','Core/Src/BoardBus.c','Libraries/Hmi/src/HmiPages.c','Libraries/Hmi/src/HmiHome.c',
     'Libraries/Hmi/src/HmiPagesDma.c','Libraries/Hmi/platform/HmiAssetDma.c',
     (Join-Path $taskOut 'pages.c'),(Join-Path $taskOut 'board-profile.c'),(Join-Path $taskOut 'font-small.c'),(Join-Path $taskOut 'font-value.c'))
 }
@@ -39,7 +39,7 @@ foreach($taskSource in $taskSources) {
  $taskFull=if([IO.Path]::IsPathRooted($taskSource)){$taskSource}else{Join-Path $taskRoot $taskSource}
  $taskObject=Join-Path $taskOut (([IO.Path]::GetFileNameWithoutExtension($taskSource))+'.o')
  $taskArgs=@($taskFlags)
- if($taskSource -match 'Hmi|BurnerRuntime|SensorMath|CombustionCycle|RtuMaster|BoardBus|board-profile|pages.c') {$taskArgs+='-Werror'}
+ if($taskSource -match 'Hmi|BurnerRuntime|StartOverride|SensorMath|CombustionCycle|RtuMaster|BoardBus|board-profile|pages.c') {$taskArgs+='-Werror'}
  & $taskGcc @taskArgs -c $taskFull -o $taskObject
  if($LASTEXITCODE -ne 0) {throw ('Compile failed: '+$taskSource)}
  $taskObjects+=$taskObject

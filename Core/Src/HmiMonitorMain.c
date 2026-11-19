@@ -58,7 +58,7 @@ static NRF24_Radio radio;
 static CO2_Snapshot co2_cache;
 static MAX6675_Snapshot_t temperatures;
 static bool assets_ok,radio_ok,painted,page_changed=true,render_diag;
-static uint32_t last_capture,health_ms,last_tc[2],last_bus_errors;
+static uint32_t last_capture,health_ms,last_bus_errors;
 static uint32_t scan_ms,render_revision;
 static uint8_t prior_pressed,tone;
 static uint8_t last_nrf[32];
@@ -77,6 +77,8 @@ static void PageChanged(void)
 }
 static void StopManualMotor(void)
 {
+    BoardActuation_StopFanTuning();
+    BoardActuation_StopRelayTest();
     BurnerAppSnapshot b;BurnerApp_GetSnapshot(&b);
     if(b.state==BURNER_IDLE&&DamperStepper_IsRunning())BoardActuation_Abort();
 }
@@ -104,10 +106,24 @@ static void ApplicationKey(KeyCode key)
     UiPage before=navigation.page;
     UiAction action=UiNavigation_Key(&navigation,key,b.mode==BURNER_AUTO_MODE,b.co2_target_ppm);
     if(before==UI_PAGE_SERVICE&&navigation.page!=UI_PAGE_SERVICE)StopManualMotor();
+    if(before==UI_PAGE_FAN&&navigation.page!=UI_PAGE_FAN)BoardActuation_StopFanTuning();
     switch(action) {
+    case NAV_FAN_APPLY: {
+        bool ok=BoardActuation_TuneFan(navigation.fan_ccr,b.state==BURNER_IDLE,HAL_GetTick());
+        snprintf(menu_message,sizeof(menu_message),"%s",ok?"CCR applied; measure RPM":"Refused: IDLE, ZC, relays OFF, motor stopped");
+        DiagLog_Write(HAL_GetTick(),ok?DIAG_INFO:DIAG_WARN,"FANTUNE","CCR=%u accepted=%u",navigation.fan_ccr,ok);
+        break;
+    }
+    case NAV_FAN_LIMITS:
+        BoardActuation_StopFanTuning();
+        snprintf(menu_message,sizeof(menu_message),"Limits saved in RAM; fan OFF; apply CCR again");break;
+    case NAV_FAN_OFF:
+        BoardActuation_StopFanTuning();
+        snprintf(menu_message,sizeof(menu_message),"Fan OFF");break;
     case NAV_SAVE_MODE:(void)BurnerApp_SetMode(navigation.draft_auto?BURNER_AUTO_MODE:BURNER_MANUAL_MODE);break;
     case NAV_SAVE_CO2:(void)BurnerApp_SetCO2Target(navigation.draft_co2);break;
     case NAV_START: {
+        BoardActuation_StopRelayTest();
         BurnerCommandResult result=BurnerApp_Start(BURNER_HMI);
         BurnerApp_GetSnapshot(&b);
         snprintf(menu_message,sizeof(menu_message),"START: %s",result==BURNER_COMMAND_ACCEPTED?"ACCEPTED":result==BURNER_COMMAND_BUSY?"BUSY / LOCKOUT":Burner_StartBlockText(b.start_blockers));
@@ -115,29 +131,34 @@ static void ApplicationKey(KeyCode key)
         home_command_ms=HAL_GetTick();home_command_visible=true;break;
     }
     case NAV_STOP:
+        BoardActuation_StopRelayTest();
         BurnerApp_Stop(BURNER_HMI);
         snprintf(menu_message,sizeof(menu_message),"STOP: %s",b.state==BURNER_IDLE?"ALREADY IDLE":b.state==BURNER_LOCKOUT?"FAULT REMAINS":"SHUTDOWN REQUESTED");
         snprintf(home_command_message,sizeof(home_command_message),"%.47s",menu_message);
         home_command_ms=HAL_GetTick();home_command_visible=true;break;
     case NAV_STEP_PLUS:case NAV_STEP_MINUS: {
-        int64_t endpoint=(int64_t)DamperStepper_GetPosition()+(action==NAV_STEP_PLUS?16:-16);
+        int64_t endpoint=(int64_t)DamperStepper_GetPosition()+(action==NAV_STEP_PLUS?160:-160);
         HAL_StatusTypeDef result=HAL_BUSY;
         if(b.state==BURNER_IDLE&&!b.requested.gas&&!(HC595_GetShadow()&0x82U)&&!DamperStepper_IsRunning()&&endpoint>=INT32_MIN&&endpoint<=INT32_MAX) {
-            result=BoardActuation_ManualStep(action==NAV_STEP_PLUS?16:-16);
+            result=BoardActuation_ManualStep(action==NAV_STEP_PLUS?160:-160);
         }
-        snprintf(menu_message,sizeof(menu_message),"Motor: %s",result==HAL_OK?"16-pulse manual move; NOT HOMED":"refused busy / unsafe state");
+        snprintf(menu_message,sizeof(menu_message),"Motor: %s",result==HAL_OK?"160-pulse move; NOT HOMED":result==HAL_ERROR?"driver init / speed / endpoint error":"refused busy / unsafe state");
         DiagLog_Write(HAL_GetTick(),result==HAL_OK?DIAG_INFO:DIAG_WARN,"SERVICE","Motor target=%ld result=%u",(long)endpoint,(unsigned)result);break;
     }
     case NAV_MOTOR_STOP:
+        BoardActuation_StopRelayTest();
         if(b.state==BURNER_IDLE) {BoardActuation_Abort();snprintf(menu_message,sizeof(menu_message),"Motor stopped; ref UNKNOWN");}
         else snprintf(menu_message,sizeof(menu_message),"Use device STOP while process owns motor");
         break;
     case NAV_CONFIRM_EXHAUST: {
         bool ok=b.state==BURNER_IDLE&&!b.requested.gas&&!(HC595_GetShadow()&0x82U)&&BoardActuation_ConfirmExhaust();
-        snprintf(menu_message,sizeof(menu_message),"EXHAUST reference: %s",ok?"confirmed by operator":"refused; idle + Hall LOW required");
+        snprintf(menu_message,sizeof(menu_message),"EXHAUST reference: %s",ok?"confirmed by operator":"refused: IDLE/motor/gas/ign check");
         DiagLog_Write(HAL_GetTick(),ok?DIAG_WARN:DIAG_ERROR,"DAMPER","Operator EXHAUST reference accepted=%u",ok);break;
     }
-    case NAV_BEEP:(void)Buzzer_Play(2400,300);snprintf(menu_message,sizeof(menu_message),"Buzzer 2400Hz / 300ms");break;
+    case NAV_RELAY_TEST:
+        if(BoardActuation_RelayTestActive()) {BoardActuation_StopRelayTest();snprintf(menu_message,sizeof(menu_message),"Relay test stopped; all OFF");}
+        else snprintf(menu_message,sizeof(menu_message),"%s",BoardActuation_StartRelayTest(b.state==BURNER_IDLE&&!b.requested.gas,HAL_GetTick())?"Q1..Q7: add every 3s; all OFF at 21s":"Relay test refused: IDLE + motor stopped required");
+        break;
     case NAV_RESET:
         snprintf(menu_message,sizeof(menu_message),"%s",BurnerApp_AcknowledgeFault()?"Fault acknowledged; START required":"Reset refused: conditions not satisfied");break;
     default:break;
@@ -178,7 +199,7 @@ static void Keys(void)
         if(HmiDiag_Key(&diag,key)) {
 #if defined(FW_FINAL_APPLICATION)
             navigation.output_confirm=false;
-            if(navigation.page==UI_PAGE_SERVICE)StopManualMotor();
+            if(navigation.page==UI_PAGE_SERVICE||navigation.page==UI_PAGE_FAN)StopManualMotor();
             if(!diag.open) {navigation.page=UI_PAGE_HOME;navigation.focus=1;navigation.editing=false;route_focus=-1;if(assets_ok)active_page=HmiPages_Find(hmi_pages,hmi_page_count,"home");}
 #endif
             mask=__get_PRIMASK();__disable_irq();KeyInput_RequireRelease(&keys);__set_PRIMASK(mask);
@@ -251,14 +272,17 @@ static void Health(uint32_t now)
         DiagLog_Write(now,DIAG_ERROR,"SPI2","errors=%lu code=%08lX shadow=%02X latched=%02X",
             (unsigned long)bus.errors,(unsigned long)bus.last_error,bus.shadow,bus.latched);
     }
+    static bool seen[2];
+    static uint32_t previous_health[2];
     for(unsigned i=0;i<2;++i) {
         const MAX6675_Data_t *d=&temperatures.sensor[i];
-        if(d->last_attempt_ms!=last_tc[i]) {
-            last_tc[i]=d->last_attempt_ms;
-            DiagLog_Write(now,d->valid?DIAG_DEBUG:DIAG_WARN,i?"TC2":"TC1",
-                "raw=%04X q4=%u status=%u valid=%u old=%u age=%lu",d->raw,d->temperature_q4,
-                (unsigned)d->last_status,d->valid,d->stale,
-                (unsigned long)(d->has_valid_sample?now-d->last_valid_ms:0U));
+        uint32_t health=(uint32_t)d->last_status|((uint32_t)d->valid<<8)|
+            ((uint32_t)d->stale<<9)|((uint32_t)d->has_valid_sample<<10);
+        if(!seen[i]||health!=previous_health[i]) {
+            seen[i]=true;previous_health[i]=health;
+            DiagLog_Write(now,d->valid?DIAG_INFO:DIAG_WARN,i?"TC2":"TC1",
+                "status=%u valid=%u stale=%u has=%u",
+                (unsigned)d->last_status,d->valid,d->stale,d->has_valid_sample);
         }
     }
 }
@@ -307,12 +331,56 @@ static void HexRows(const char *prefix,const uint8_t *data,unsigned length)
         LiveLine(DIAG_INFO,"%s",text);
     }
 }
+#if defined(FW_FINAL_APPLICATION)
+static const char *DiagSource(BurnerSource source)
+{return source==BURNER_PLC?"PLC":source==BURNER_AUTO?"AUTO":"HMI";}
+static const char *FaultAction(BurnerFault fault)
+{
+    switch(fault) {
+    case BURNER_NO_FAULT:return "No latched fault";
+    case BURNER_FALSE_FLAME:return "Check PA1: flame before ignition";
+    case BURNER_FLAME_LOST:return "Check flame detector and fuel supply";
+    case BURNER_IGNITION_FAILED:return "Check ignition, fuel and flame signal";
+    case BURNER_INPUT_STALE:return "Check TC1 validity and input ages";
+    case BURNER_ACTUATION:return "Check output inhibits and damper";
+    case BURNER_AIRFLOW:return "Check fan sync and airflow input";
+    case BURNER_CO_HIGH:return "Check combustion and CO measurement";
+    case BURNER_CO_TIMEOUT:return "Check CO calibration and sample path";
+    case BURNER_COOLING_TIMEOUT:return "Check TC2 and sample cooler fan";
+    case BURNER_TEMPERATURE:return "Check TC1 and combustion temperature";
+    case BURNER_ADJUST_LIMIT:return "Air adjustment limit; inspect burner";
+    case BURNER_CONFIGURATION:return "Check effective process settings";
+    default:return "Check interlocks and damper feedback";
+    }
+}
+static const char *StageWait(const BurnerAppSnapshot *b)
+{
+    if(b->state==BURNER_IDLE)return "Waiting START command";
+    if(b->state==BURNER_LOCKOUT)return "Resolve cause; acknowledge fault";
+    if(b->state==BURNER_PRECHECK)return "Checking no-flame / outputs OFF";
+    if(b->state==BURNER_PURGE||b->state==BURNER_INTERPURGE)
+        return b->timing.purge_counting?"Logical purge timer running":"Waiting fan request + sync";
+    if(b->state==BURNER_IGNITION_1||b->state==BURNER_IGNITION_2)return "Waiting flame stable for 500ms";
+    if(b->state==BURNER_SHUTDOWN||b->state==BURNER_POSTPURGE)return "Postpurge then outputs OFF";
+    switch(b->sample_state) {
+    case SAMPLE_WAIT_BYPASS:return "Waiting EXHAUST position";
+    case SAMPLE_WAIT_TEMPERATURE:return temperatures.sensor[0].valid?"Waiting initial sample delay":"Waiting valid TC1 temperature";
+    case SAMPLE_VALVE_1:return "Filling sample; valve 1 open";
+    case SAMPLE_COOLING:return "Waiting valid TC2 below 40 C";
+    case SAMPLE_VALVE_2:return "Transferring sample; valve 2 open";
+    case SAMPLE_WAIT_CO:return "Waiting fresh calibrated CO";
+    case SAMPLE_AIR_SETTLE:return "Waiting air adjustment to settle";
+    case SAMPLE_ACCEPTED:return b->process_proven?"Distribution; periodic CO recheck":"Waiting GREENHOUSE position";
+    default:return "Starting sample cycle";
+    }
+}
+#endif
 static void CaptureLive(uint32_t now,const CO2_Snapshot *co2)
 {
     uint32_t cycle_start=DWT->CYCCNT;
-    static const char *names[]={"LOG","INPUTS","OUTPUTS","ADC","SENSORS","COMMS","PROCESS","SYSTEM"};
+    static const char *names[]={"SUMMARY","EVENTS","OUTPUTS","SENSORS","COMMS","ADV GPIO","ADV ADC","ADV SYSTEM"};
     memset(view.lines,0,sizeof(view.lines));memset(view.levels,0,sizeof(view.levels));live_index=0;
-    snprintf(view.header,sizeof(view.header),"> DIAG / %s / LIVE",names[diag.section]);
+    snprintf(view.header,sizeof(view.header),"DIAG %u/%u | %s | LIVE",(unsigned)diag.section+1U,HMI_DIAG_SECTIONS,names[diag.section]);
     snprintf(view.footer,sizeof(view.footer),"OK next | UP/DN scroll | Cancel HOME");
     HmiMonitorIoSnapshot io;HmiMonitorIo_Get(&io);
 #if defined(FW_FINAL_APPLICATION)
@@ -335,45 +403,42 @@ static void CaptureLive(uint32_t now,const CO2_Snapshot *co2)
         LiveLine(DIAG_INFO,"GPIOC IDR=%04lX GPIOD IDR=%04lX",GPIOC->IDR&0xffffUL,GPIOD->IDR&0xffffUL);
         LiveLine(DIAG_INFO,"Debounced keys=%X armed=%u",keys.stable,keys.armed);
         LiveLine(DIAG_WARN,"No airflow / gas-closed proof configured");
-    } else if(diag.section==HMI_DIAG_OUTPUTS) {
-        LiveLine(DIAG_INFO,"595 REQUEST=%02X LATCHED=%02X",bus.shadow,bus.latched);
-        const char *outputs[]={"Q0 MAX6675 SELECT","Q1 IGNITION","Q2 EXCHANGER FAN","Q3 SAMPLE VALVE 1",
-            "Q4 SAMPLE VALVE 2","Q5 DISTRIBUTION FAN","Q6 SAMPLE COOLER FAN","Q7 GAS VALVE"};
-        for(unsigned i=0;i<8;++i)LiveLine(DIAG_INFO,"%s req=%u latch=%u",outputs[i],(bus.shadow>>i)&1U,(bus.latched>>i)&1U);
-        LiveLine(DIAG_WARN,"LATCHED is sent image, not relay feedback");
-        LiveLine(DIAG_INFO,"PA8 FAN CCR=%lu pin=%u gate=%u",(unsigned long)TIM1->CCR1,(unsigned)((GPIOA->IDR>>8)&1U),(unsigned)((TIM1->BDTR&TIM_BDTR_MOE)!=0));
-#if defined(FW_FINAL_APPLICATION)
-        BoardActuationSnapshot act;BoardActuation_Get(&act);
-        LiveLine(act.fault?DIAG_ERROR:DIAG_INFO,"ACT inhibit=%u fault=%u REF=%u MOVE=%u",act.inhibited,act.fault,act.referenced,act.moving);
-        LiveLine(DIAG_INFO,"FAN calibrated=%u ZC sync=%u",act.fan_calibrated,act.fan_sync);
-        LiveLine(DIAG_INFO,"DAMPER exhaust=%u greenhouse=%u moves=%lu",act.bypass_proven,act.process_proven,(unsigned long)act.moves);
-#endif
-        LiveLine(DIAG_INFO,"STEP PC8=%u DIR PC9=%u",(unsigned)((GPIOC->IDR>>8)&1U),(unsigned)((GPIOC->ODR>>9)&1U));
-        LiveLine(DIAG_INFO,"EN PC6=%u PC7=%u [LOW=enable]",(unsigned)((GPIOC->ODR>>6)&1U),(unsigned)((GPIOC->ODR>>7)&1U));
-        LiveLine(DIAG_INFO,"BUZZER PB13 TIM4 tone=%u",Buzzer_IsPlaying());
-        LiveLine(DIAG_INFO,"NRF CE PA11=%u CSN PA15=%u",(unsigned)((GPIOA->ODR>>11)&1U),(unsigned)((GPIOA->ODR>>15)&1U));
-        LiveLine(DIAG_INFO,"LCD CS PD2=%u DC PC12=%u RST PC10=%u",(unsigned)((GPIOD->ODR>>2)&1U),(unsigned)((GPIOC->ODR>>12)&1U),(unsigned)((GPIOC->ODR>>10)&1U));
-        LiveLine(DIAG_INFO,"595 LATCH PA0=%u",(unsigned)(GPIOA->ODR&1U));
-        LiveLine(DIAG_INFO,"Sample cooler fan: Q6 active HIGH");
         LiveLine(DIAG_INFO,"GPIOA ODR=%04lX GPIOB ODR=%04lX",GPIOA->ODR&0xffffUL,GPIOB->ODR&0xffffUL);
         LiveLine(DIAG_INFO,"GPIOC ODR=%04lX GPIOD ODR=%04lX",GPIOC->ODR&0xffffUL,GPIOD->ODR&0xffffUL);
+        LiveLine(DIAG_INFO,"STEP PC8=%u DIR PC9=%u",(unsigned)((GPIOC->IDR>>8)&1U),(unsigned)((GPIOC->ODR>>9)&1U));
+        LiveLine(DIAG_INFO,"EN PC6=%u PC7=%u [LOW=enable]",(unsigned)((GPIOC->ODR>>6)&1U),(unsigned)((GPIOC->ODR>>7)&1U));
+        LiveLine(DIAG_INFO,"LCD CS PD2=%u DC PC12=%u RST PC10=%u",(unsigned)((GPIOD->ODR>>2)&1U),(unsigned)((GPIOC->ODR>>12)&1U),(unsigned)((GPIOC->ODR>>10)&1U));
+        LiveLine(DIAG_INFO,"NRF CE PA11=%u CSN PA15=%u",(unsigned)((GPIOA->ODR>>11)&1U),(unsigned)((GPIOA->ODR>>15)&1U));
+        LiveLine(DIAG_INFO,"595 LATCH PA0=%u Q0 SELECT=%u",(unsigned)(GPIOA->ODR&1U),bus.latched&1U);
+    } else if(diag.section==HMI_DIAG_OUTPUTS) {
+#if defined(FW_FINAL_APPLICATION)
+        BurnerAppSnapshot b;BurnerApp_GetSnapshot(&b);
+        BoardActuationSnapshot act;BoardActuation_Get(&act);
+        LiveLine(act.inhibited?DIAG_WARN:DIAG_INFO,"Outputs: %s",act.inhibited?"INHIBITED":"PERMITTED");
+        if(act.inhibited)LiveLine(DIAG_WARN,"Reason: %s",BoardActuation_InhibitText(act.inhibit_flags));
+        LiveLine(DIAG_INFO,"Fan req=%u CCR=%lu gate=%u",b.requested.combustion_fan,
+            (unsigned long)TIM1->CCR1,(unsigned)((TIM1->BDTR&TIM_BDTR_MOE)!=0));
+        LiveLine(DIAG_INFO,"REF=%u ZC sync=%u table=%u fault=%u",act.referenced,act.fan_sync,act.fan_calibrated,act.fault);
+        const unsigned order[]={7,1,2,5,6,3,4};
+        const char *labels[]={"Gas Q7","Ignition Q1","Exchanger Q2","Distribution Q5","Sample cooler Q6","Sample valve 1 Q3","Sample valve 2 Q4"};
+        const bool req[]={b.requested.gas,b.requested.ignition,b.requested.exchanger_fan,b.requested.distribution_fan,
+            b.requested.cooler_fan,b.requested.sample_valve_1,b.requested.sample_valve_2};
+        for(unsigned i=0;i<7;i++)LiveLine(DIAG_INFO,"%s req=%u queued=%u sent=%u",labels[i],req[i],
+            (bus.shadow>>order[i])&1U,(bus.latched>>order[i])&1U);
+        LiveLine(DIAG_WARN,"Sent image is NOT physical relay feedback");
+        LiveLine(DIAG_INFO,"Damper REF=%u EXH=%u GREEN=%u",act.referenced,act.bypass_proven,act.process_proven);
+        LiveLine(DIAG_INFO,"Motor running=%u position=%ld",DamperStepper_IsRunning(),(long)DamperStepper_GetPosition());
+        for(unsigned bit=0;bit<6;bit++)if(act.inhibit_flags&(1U<<bit))
+            LiveLine(DIAG_WARN,"Inhibit: %s",BoardActuation_InhibitText(1U<<bit));
+#else
+        LiveLine(DIAG_INFO,"Relay image queued=%02X sent=%02X",bus.shadow,bus.latched);
+        LiveLine(DIAG_WARN,"Physical relay feedback unavailable");
+#endif
     } else if(diag.section==HMI_DIAG_ADC) {
         bool fresh=io.adc_sequence && now-io.adc_ms<500U;
         uint16_t cal=*VREFINT_CAL_ADDR;
         HmiDiagAnalog analog;HmiDiag_Analog(io.raw,fresh,cal,*TEMPSENSOR_CAL1_ADDR,*TEMPSENSOR_CAL2_ADDR,&analog);
         uint32_t vdda=analog.vdda_mv;bool volts=analog.voltage_valid;
-        LiveLine(fresh?DIAG_INFO:DIAG_ERROR,"ADC seq=%lu age=%lu ms %s",(unsigned long)io.adc_sequence,
-            (unsigned long)(io.adc_sequence?now-io.adc_ms:0U),fresh?"VALID":"NO DATA / STALE");
-        LiveLine(DIAG_INFO,"TIM5_CH1 internal PWM 20Hz -> ADC1 DMA S0");
-        const char *labels[]={"PA2 ME2sig","PA3 ME2diff","PA4 ME2ntc","PA5 mixer NTC","VREFINT","CPU TEMP"};
-        for(unsigned i=0;i<6;++i) {
-            if(volts)LiveLine(DIAG_INFO,"%s raw=%u mV=%lu",labels[i],io.raw[i],(unsigned long)((uint32_t)io.raw[i]*vdda/4095U));
-            else LiveLine(DIAG_WARN,"%s raw=%u mV=INVALID",labels[i],io.raw[i]);
-        }
-        LiveLine(volts?DIAG_INFO:DIAG_WARN,"VDDA=%lu mV VREFcal=%u",(unsigned long)vdda,cal);
-        LiveLine(DIAG_INFO,"mV = raw * VDDA / 4095");
-        LiveLine(DIAG_INFO,"ME2 differential raw = %ld",(long)((int32_t)io.raw[0]-io.raw[1]));
-        if(volts)LiveLine(DIAG_INFO,"ME2 dV=%ld mV",(long)(((int32_t)io.raw[0]-io.raw[1])*(int32_t)vdda/4095));
 #if defined(FW_FINAL_APPLICATION)
         if(analog_values.co_valid)LiveLine(DIAG_INFO,"CO=%u ppm age=%lu ms",analog_values.co_ppm,(unsigned long)(now-analog_time));
         else LiveLine(DIAG_WARN,"CO ppm=UNCAL / INVALID");
@@ -385,86 +450,111 @@ static void CaptureLive(uint32_t now,const CO2_Snapshot *co2)
         LiveLine(DIAG_WARN,"CO ppm=UNCAL; zero/span/Tcorr pending");
         LiveLine(DIAG_WARN,"NTC degrees=UNCAL; curve/Beta pending");
 #endif
+        LiveLine(fresh?DIAG_INFO:DIAG_ERROR,"ADC seq=%lu age=%lu ms %s",(unsigned long)io.adc_sequence,
+            (unsigned long)(io.adc_sequence?now-io.adc_ms:0U),fresh?"VALID":"NO DATA / STALE");
+        LiveLine(DIAG_INFO,"TIM5_CH1 internal PWM 20Hz -> ADC1 DMA S0");
+        const char *labels[]={"PA2 ME2sig","PA3 ME2diff","PA4 ME2ntc","PA5 mixer NTC","VREFINT","CPU TEMP"};
+        for(unsigned i=0;i<6;++i) {
+            if(volts)LiveLine(DIAG_INFO,"%s raw=%u mV=%lu",labels[i],io.raw[i],(unsigned long)((uint32_t)io.raw[i]*vdda/4095U));
+            else LiveLine(DIAG_WARN,"%s raw=%u mV=INVALID",labels[i],io.raw[i]);
+        }
+        LiveLine(volts?DIAG_INFO:DIAG_WARN,"VDDA=%lu mV VREFcal=%u",(unsigned long)vdda,cal);
+        LiveLine(DIAG_INFO,"ME2 differential raw = %ld",(long)((int32_t)io.raw[0]-io.raw[1]));
+        if(volts)LiveLine(DIAG_INFO,"ME2 dV=%ld mV",(long)(((int32_t)io.raw[0]-io.raw[1])*(int32_t)vdda/4095));
         LiveLine(DIAG_INFO,"ADC errors=%lu started=%u",(unsigned long)io.adc_errors,io.adc_started);
         if(analog.cpu_temperature_valid) {
             LiveLine(DIAG_INFO,"CPU temp = %ld x 0.1 C",(long)analog.cpu_temperature_tenths);
         }
     } else if(diag.section==HMI_DIAG_SENSORS) {
+        LiveLine(DIAG_INFO,"Flame PA1: %s",(GPIOA->IDR&2U)?"DETECTED":"NOT DETECTED");
+#if defined(FW_FINAL_APPLICATION)
+        if(analog_values.co_valid)LiveLine(DIAG_INFO,"CO=%u ppm age=%lu ms",analog_values.co_ppm,(unsigned long)(now-analog_time));
+        else LiveLine(DIAG_WARN,"CO: %s",board_analog_calibration.calibrated?"INVALID / STALE":"NOT CALIBRATED");
+        BurnerAppSnapshot b;BurnerApp_GetSnapshot(&b);
+        LiveLine(DIAG_INFO,"CO limits accept/run/trip=%u/%u/%u",b.co_accept_ppm,b.co_limit_ppm,b.co_trip_ppm);
+#endif
         for(unsigned i=0;i<2;++i) {
             const MAX6675_Data_t *d=&temperatures.sensor[i];char temperature[24];Temperature(temperature,sizeof(temperature),d);
-            LiveLine(d->valid?DIAG_INFO:DIAG_WARN,"TC%u %s: %s",i+1,i?"SAMPLE COOLER":"FLAME",temperature);
-            LiveLine(DIAG_INFO," raw=%04X q4=%u status=%u",d->raw,d->temperature_q4,(unsigned)d->last_status);
-            LiveLine(DIAG_INFO," has=%u valid=%u stale=%u age=%lu",d->has_valid_sample,d->valid,d->stale,(unsigned long)(d->has_valid_sample?now-d->last_valid_ms:0));
-            LiveLine(DIAG_INFO," SPI errors=%lu OPEN errors=%lu",(unsigned long)d->spi_error_count,(unsigned long)d->open_error_count);
+            LiveLine(d->valid?DIAG_INFO:DIAG_WARN,"TC%u %s: %s",i+1,i?"sample cooler":"flame",temperature);
+            if(d->has_valid_sample)LiveLine(d->valid?DIAG_INFO:DIAG_WARN,"  valid=%u age=%lu ms stale=%u",d->valid,(unsigned long)(now-d->last_valid_ms),d->stale);
+            else LiveLine(DIAG_WARN,"  No valid sample received");
+            LiveLine(DIAG_INFO,"  SPI errors=%lu OPEN errors=%lu",(unsigned long)d->spi_error_count,(unsigned long)d->open_error_count);
         }
-        LiveLine(DIAG_INFO,"MAX6675: q4=(raw>>3)&0xFFF; C=q4/4");
-        LiveLine(co2->valid?DIAG_INFO:DIAG_WARN,"CO2=%u ppm valid=%u age=%lu ms",co2->ppm,co2->valid,(unsigned long)(co2->has_valid_sample?now-co2->last_valid_ms:0));
-        LiveLine(DIAG_WARN,"ME2 CO: UNCALIBRATED (see ADC)");
+        if(co2->valid)LiveLine(DIAG_INFO,"CO2=%u ppm age=%lu ms",co2->ppm,(unsigned long)(now-co2->last_valid_ms));
+        else LiveLine(DIAG_WARN,"CO2: %s",co2->link_stale?"NO LINK":"INVALID / WARMUP");
 #if defined(FW_FINAL_APPLICATION)
-        LiveLine(serial_bus.lux_valid?DIAG_INFO:DIAG_WARN,"RS485 BH1750 lux=%lu x0.01 valid=%u",(unsigned long)serial_bus.lux_centi,serial_bus.lux_valid);
-        LiveLine(DIAG_INFO,"Daylight=%u LUX age=%lu ms",serial_bus.daylight,(unsigned long)(now-serial_bus.lux_ms));
-#else
-        LiveLine(DIAG_WARN,"Lux/daylight: NOT CONFIGURED");
+        BoardActuationSnapshot act;BoardActuation_Get(&act);
+        LiveLine(DIAG_INFO,"Hall=%s REF=%u EXH=%u GREEN=%u",(GPIOB->IDR&(1U<<12))?"INACTIVE":"ACTIVE",act.referenced,act.bypass_proven,act.process_proven);
+        LiveLine(act.fan_sync?DIAG_INFO:DIAG_WARN,"Fan sync: %s",act.fan_sync?"VALID":"MISSING");
+        if(act.fan_sync_age_ms!=UINT32_MAX)LiveLine(DIAG_INFO,"ZC period=%lu us last pulse=%lu ms ago",(unsigned long)act.fan_period_us,(unsigned long)act.fan_sync_age_ms);
+        else LiveLine(DIAG_WARN,"ZC: no captured pulses");
+        if(!board_bus_config.enabled)LiveLine(DIAG_INFO,"Daylight: RS485 DISABLED");
+        else if(!serial_bus.lux_valid)LiveLine(DIAG_WARN,"Daylight: INVALID / STALE");
+        else LiveLine(DIAG_INFO,"Daylight=%s lux=%lu.%02lu age=%lu ms",serial_bus.daylight?"DAY":"NIGHT",
+            (unsigned long)(serial_bus.lux_centi/100U),(unsigned long)(serial_bus.lux_centi%100U),(unsigned long)(now-serial_bus.lux_ms));
 #endif
-        LiveLine(DIAG_INFO,"HALL raw PB12=%u; homing UNKNOWN",(unsigned)((GPIOB->IDR>>12)&1U));
-        LiveLine(DIAG_INFO,"FLAME GPIO=%u; health UNPROVEN",(unsigned)((GPIOA->IDR>>1)&1U));
-        LiveLine(DIAG_INFO,"ZC GPIO=%u; timing NOT VALIDATED",(unsigned)((GPIOA->IDR>>9)&1U));
     } else if(diag.section==HMI_DIAG_COMMS) {
-        LiveLine(radio.ready?DIAG_INFO:DIAG_WARN,"NRF ready=%u detected=%u state=%u",radio.ready,radio.detected,(unsigned)radio.state);
-        LiveLine(DIAG_INFO,"NRF ch=%u rate=1M STATUS=%02X",NRF24_CHANNEL,radio.status);
-        LiveLine(DIAG_INFO,"RX=%lu dropped=%lu SPIerr=%lu",(unsigned long)radio.stats.rx_packets,(unsigned long)radio.stats.rx_dropped,(unsigned long)radio.stats.spi_errors);
-        LiveLine(DIAG_INFO,"configErr=%lu recover=%lu",(unsigned long)radio.stats.config_errors,(unsigned long)radio.stats.recoveries);
-        LiveLine(DIAG_INFO,"Last NRF frame count=%lu age=%lu",(unsigned long)nrf_frames,(unsigned long)(nrf_frames?now-last_nrf_ms:0));
-        HexRows("NRF",last_nrf,nrf_frames?32:0);
-        LiveLine(DIAG_INFO,"CO2 seq=%lu ppm=%u status=%u",(unsigned long)co2->last_sequence,co2->ppm,co2->last_status);
-        LiveLine(DIAG_INFO,"accepted=%lu rejected=%lu duplicate=%lu",(unsigned long)co2->accepted,(unsigned long)co2->rejected,(unsigned long)co2->duplicates);
-        LiveLine(io.uart_started?DIAG_INFO:DIAG_ERROR,"USART1 115200 8N1 RX-DMA=%u",io.uart_started);
-        LiveLine(DIAG_INFO,"RX bytes=%lu chunks=%lu errors=%lu",(unsigned long)io.rx_bytes,(unsigned long)io.rx_chunks,(unsigned long)io.rx_errors);
-        LiveLine(DIAG_INFO,"Last RX chunk age=%lu ms len=%u",(unsigned long)(io.rx_chunks?now-io.rx_ms:0),io.rx_length);
-        HexRows("UART",io.rx,io.rx_length);
+        if(co2->valid)LiveLine(DIAG_INFO,"CO2 link: VALID, %u ppm",co2->ppm);
+        else LiveLine(DIAG_WARN,"CO2 link: %s",co2->link_stale?"STALE / NO DATA":"WARMUP / INVALID");
+        LiveLine(radio.ready?DIAG_INFO:DIAG_WARN,"Radio: %s",radio.ready?"READY":"NOT READY");
+        if(co2->has_valid_sample)LiveLine(DIAG_INFO,"CO2 sample age=%lu ms",(unsigned long)(now-co2->last_valid_ms));
+        LiveLine(DIAG_INFO,"RX=%lu dropped=%lu SPI errors=%lu",(unsigned long)radio.stats.rx_packets,(unsigned long)radio.stats.rx_dropped,(unsigned long)radio.stats.spi_errors);
 #if defined(FW_FINAL_APPLICATION)
-        LiveLine(serial_bus.configured?DIAG_INFO:DIAG_WARN,"RS485 MASTER configured=%u slot=%u",serial_bus.configured,serial_bus.active_slot);
-        LiveLine(DIAG_INFO,"TX=%lu OK=%lu timeout=%lu CRC=%lu",(unsigned long)serial_bus.tx_count,(unsigned long)serial_bus.completed,(unsigned long)serial_bus.timeouts,(unsigned long)serial_bus.crc_errors);
-        LiveLine(DIAG_INFO,"PLC=%u LUX=%u exception=%u",serial_bus.plc_valid,serial_bus.lux_valid,serial_bus.last_exception);
-#else
-        LiveLine(DIAG_WARN,"RS485/Delta protocol+DE UNCONFIGURED");
-        LiveLine(DIAG_INFO,"RX is raw UART data, not validated PLC");
+        LiveLine(DIAG_INFO,"RS485: %s",!board_bus_config.enabled?"DISABLED":serial_bus.configured?"CONFIGURED":"NOT READY");
+        if(board_bus_config.enabled) {
+            LiveLine(serial_bus.plc_valid?DIAG_INFO:DIAG_WARN,"PLC=%s DAYLIGHT=%s",serial_bus.plc_valid?"VALID":"NO DATA",serial_bus.lux_valid?"VALID":"NO DATA");
+            LiveLine(DIAG_INFO,"Timeout=%lu CRC=%lu protocol=%lu",(unsigned long)serial_bus.timeouts,(unsigned long)serial_bus.crc_errors,(unsigned long)serial_bus.protocol_errors);
+            LiveLine(DIAG_INFO,"TX=%lu replies=%lu retries=%lu",(unsigned long)serial_bus.tx_count,(unsigned long)serial_bus.completed,(unsigned long)serial_bus.retries);
+        }
 #endif
-        LiveLine(DIAG_INFO,"SPI1 LCD=%u SPI2 bus=%u SPI5 NRF=%u",(unsigned)hspi1.State,(unsigned)hspi2.State,(unsigned)hspi5.State);
-    } else if(diag.section==HMI_DIAG_PROCESS) {
+        LiveLine(DIAG_INFO,"UART %lu %s %s RX-DMA=%u",(unsigned long)huart1.Init.BaudRate,
+            huart1.Init.Parity==UART_PARITY_NONE?"8N":huart1.Init.Parity==UART_PARITY_EVEN?"8E":"8O",
+            huart1.Init.StopBits==UART_STOPBITS_2?"2":"1",io.uart_started);
+        LiveLine(DIAG_INFO,"UART bytes=%lu errors=%lu",(unsigned long)io.rx_bytes,(unsigned long)io.rx_errors);
+        LiveLine(DIAG_INFO,"Radio recoveries=%lu config errors=%lu",(unsigned long)radio.stats.recoveries,(unsigned long)radio.stats.config_errors);
+    } else if(diag.section==HMI_DIAG_SUMMARY) {
 #if defined(FW_FINAL_APPLICATION)
         BurnerAppSnapshot b;BurnerApp_GetSnapshot(&b);
-        LiveLine(b.actuators_inhibited?DIAG_WARN:DIAG_INFO,"%s %s inhibited=%u",b.output_test?"OUTPUT TEST":b.simulated?"DRY RUN":"BURNER",Burner_StateText(b.state),b.actuators_inhibited);
-        LiveLine(DIAG_INFO,"Fault=%s source=%u",Burner_FaultText(b.fault),(unsigned)b.command_source);
-        LiveLine(b.start_blockers?DIAG_WARN:DIAG_INFO,"New START blockers=%08lx",(unsigned long)b.start_blockers);
-        for(unsigned bit=0;bit<14U;++bit)if(b.start_blockers&(1UL<<bit))
-            LiveLine(DIAG_WARN,"%s",Burner_StartBlockText(1UL<<bit));
-        LiveLine(DIAG_INFO,"Sampling=%s",Burner_SampleText(b.sample_state));
-        LiveLine(DIAG_INFO,"Air request=%u%% adjustments=%u",b.air_percent,b.air_adjustments);
-        LiveLine(DIAG_INFO,"Req GAS=%u IGN=%u FAN=%u",b.requested.gas,b.requested.ignition,b.requested.combustion_fan);
-        LiveLine(DIAG_INFO,"Req V1=%u V2=%u SAMPLEFAN=%u",b.requested.sample_valve_1,b.requested.sample_valve_2,b.requested.cooler_fan);
-        LiveLine(DIAG_INFO,"Req EXCHANGE=%u DISTRIB=%u DAMPER=%u",b.requested.exchanger_fan,b.requested.distribution_fan,(unsigned)b.requested.damper);
+        BoardActuationSnapshot act;BoardActuation_Get(&act);
+        LiveLine(b.fault?DIAG_ERROR:DIAG_INFO,"Fault: %s%s%s",Burner_FaultText(b.fault),b.fault?" / ":"",b.fault?DiagSource(b.fault_source):"");
+        LiveLine(DIAG_INFO,"Stage: %s / %s",Burner_StateText(b.state),b.mode==BURNER_AUTO_MODE?"AUTO":"MANUAL");
+        if(b.fault)LiveLine(DIAG_ERROR,"Check: %s",FaultAction(b.fault));
+        if(act.inhibited) {
+            LiveLine(DIAG_WARN,"Inhibit: %s",BoardActuation_InhibitText(act.inhibit_flags));
+            if(act.inhibit_flags&ACT_BLOCK_FAULT)LiveLine(DIAG_WARN,"Action: inspect damper / Outputs details");
+            else if(act.inhibit_flags&ACT_BLOCK_REFERENCE)LiveLine(DIAG_WARN,"Action: confirm actual EXHAUST in Service");
+            else if(act.inhibit_flags&ACT_BLOCK_SYNC)LiveLine(DIAG_WARN,"Action: check zero-cross input PA9");
+            else if(act.inhibit_flags&ACT_BLOCK_CALIBRATION)LiveLine(DIAG_WARN,"Action: check fan CCR table");
+        }
+        LiveLine(DIAG_INFO,"Next: %s",act.inhibited&&!b.fault?"Resolve output inhibit shown above":StageWait(&b));
+        if(b.timing.state_timer_active)LiveLine(DIAG_INFO,"Program timer left=%lu s (logical)",(unsigned long)((b.timing.state_remaining_ms+999U)/1000U));
+        LiveLine(DIAG_INFO,"Fan req=%u CCR=%lu gate=%u",b.requested.combustion_fan,(unsigned long)TIM1->CCR1,(unsigned)((TIM1->BDTR&TIM_BDTR_MOE)!=0));
+        LiveLine(DIAG_INFO,"REF=%u sync=%u table=%u inhibited=%u",act.referenced,act.fan_sync,act.fan_calibrated,act.inhibited);
+        LiveLine(DIAG_INFO,"Gas req/sent=%u/%u Ign=%u/%u",b.requested.gas,(bus.latched>>7)&1U,b.requested.ignition,(bus.latched>>1)&1U);
+        if(b.state==BURNER_RUNNING) {
+            LiveLine(DIAG_INFO,"Sample: %s",Burner_SampleText(b.sample_state));
+            if(b.timing.sample_timer_active)LiveLine(DIAG_INFO,"Sample timer/limit left=%lu s",(unsigned long)((b.timing.sample_remaining_ms+999U)/1000U));
+        }
+        char t1[24],t2[24];Temperature(t1,sizeof(t1),&temperatures.sensor[0]);Temperature(t2,sizeof(t2),&temperatures.sensor[1]);
+        LiveLine(temperatures.sensor[0].valid?DIAG_INFO:DIAG_WARN,"TC1=%s TC2=%s",t1,t2);
+        if(analog_values.co_valid)LiveLine(DIAG_INFO,"CO=%u ppm / accept<=%u",analog_values.co_ppm,b.co_accept_ppm);
+        else LiveLine(DIAG_WARN,"CO: %s",board_analog_calibration.calibrated?"INVALID / STALE":"NOT CALIBRATED");
+        LiveLine(DIAG_INFO,"Air command level=%u adjustments=%u",b.air_percent,b.air_adjustments);
+        LiveLine(DIAG_WARN,"Airflow is inferred, NOT measured RPM/flow");
+        if(b.state==BURNER_IDLE) {
+            LiveLine(DIAG_INFO,"New START warnings (override policy):");
+            for(unsigned bit=0;bit<14U;++bit)if(b.start_blockers&(1UL<<bit))
+                LiveLine(DIAG_WARN,"%s",Burner_StartBlockText(1UL<<bit));
+        }
 #else
-        LiveLine(DIAG_WARN,"BURNER: INHIBITED / NOT COMMISSIONED");
-        LiveLine(DIAG_INFO,"Ignition FSM not active in monitor profile");
-        LiveLine(DIAG_INFO,"Sampling: IDLE; no sample valve request");
-        LiveLine(DIAG_INFO,"Air adjustment: INACTIVE / UNCONFIG");
+        LiveLine(DIAG_WARN,"Monitor only; burner control unavailable");
 #endif
-        LiveLine(DIAG_INFO,"Stepper running=%u position(cmd)=%ld",DamperStepper_IsRunning(),(long)DamperStepper_GetPosition());
-#if defined(FW_FINAL_APPLICATION)
-        BoardActuationSnapshot damper_status;BoardActuation_Get(&damper_status);
-        LiveLine(damper_status.referenced?DIAG_INFO:DIAG_WARN,"Damper ref=%u EXH=%u GREEN=%u",damper_status.referenced,damper_status.bypass_proven,damper_status.process_proven);
-#else
-        LiveLine(DIAG_WARN,"Damper reference unavailable in monitor profile");
-#endif
-        LiveLine(DIAG_INFO,"TC1 flame; TC2 sample cooler");
-        LiveLine(DIAG_INFO,"Q2 exchanger fan; Q5 distribution fan");
-        LiveLine(DIAG_INFO,"Distribution requires confirmed GREEN endpoint");
-        LiveLine(DIAG_INFO,"Relays requested=%02X latched=%02X",bus.shadow,bus.latched);
-        LiveLine(DIAG_INFO,"MAX6675+595 bus=%u dirty=%u",bus.state,bus.dirty);
-        LiveLine(DIAG_INFO,"Display busy=%u jobs=%lu tiles=%lu",stream.busy,(unsigned long)stream.completed_jobs,(unsigned long)stream.completed_tiles);
-        LiveLine(DIAG_WARN,"No certified safety controller feedback");
     } else if(diag.section==HMI_DIAG_SYSTEM) {
+        if(hmi_monitor_crash.magic==0x484d4946U)LiveLine(DIAG_ERROR,"Retained CPU fault=%lu PC=%08lX",(unsigned long)hmi_monitor_crash.exception,(unsigned long)hmi_monitor_crash.pc);
+        LiveLine(lcd.errors?DIAG_WARN:DIAG_INFO,"LCD errors=%lu stream error=%u",(unsigned long)lcd.errors,(unsigned)stream.error);
+        LiveLine(assets_ok?DIAG_INFO:DIAG_ERROR,"Assets CRC: %s",assets_ok?"OK":"FAIL");
+        LiveLine(DIAG_INFO,"SPI2 errors=%lu log overwritten=%lu",(unsigned long)bus.errors,(unsigned long)DiagLog_Overwritten());
+
         LiveLine(DIAG_INFO,"Uptime=%lu ms CPU=%lu Hz",(unsigned long)now,(unsigned long)SystemCoreClock);
         LiveLine(DIAG_INFO,"CPU code: INTERNAL FLASH 0x08000000");
         uint32_t lcd_divider=2UL<<((hspi1.Instance->CR1&SPI_CR1_BR)>>3U);
@@ -499,6 +589,11 @@ static void CaptureLive(uint32_t now,const CO2_Snapshot *co2)
         LiveLine(DIAG_WARN,"Pending integration items=%u",board_pending_count);
         for(unsigned i=0;i<board_pending_count;++i)LiveLine(DIAG_WARN,"%s",board_pending_items[i]);
 #endif
+        LiveLine(DIAG_INFO,"Raw TC1=%04X status=%u TC2=%04X status=%u",temperatures.sensor[0].raw,(unsigned)temperatures.sensor[0].last_status,temperatures.sensor[1].raw,(unsigned)temperatures.sensor[1].last_status);
+        LiveLine(DIAG_INFO,"595 queued=%02X sent=%02X state=%u",bus.shadow,bus.latched,bus.state);
+        LiveLine(DIAG_INFO,"NRF status=%02X channel=%u",radio.status,NRF24_CHANNEL);
+        HexRows("NRF",last_nrf,nrf_frames?32:0);
+        HexRows("UART",io.rx,io.rx_length);
         if(hmi_monitor_crash.magic==0x484d4946U) {
             LiveLine(DIAG_ERROR,"Retained CPU fault: exception=%lu",(unsigned long)hmi_monitor_crash.exception);
             LiveLine(DIAG_ERROR,"PC=%08lX CFSR=%08lX",(unsigned long)hmi_monitor_crash.pc,(unsigned long)hmi_monitor_crash.cfsr);
@@ -540,7 +635,7 @@ static void CapturePage(const CO2_Snapshot *co2)
         .running=b.state==BURNER_RUNNING,.starting=b.state>=BURNER_PRECHECK&&b.state<=BURNER_IGNITION_2,
         .stopping=b.state==BURNER_SHUTDOWN||b.state==BURNER_POSTPURGE,.stopped_proven=b.stopped_proven,
         .faulted=b.fault!=BURNER_NO_FAULT,.process_proven=b.process_proven,.bypass_proven=b.bypass_proven,
-        .co_valid=analog.co_valid,.co_calibrated=board_analog_calibration.calibrated,.co_ppm=analog.co_ppm,.co_limit_ppm=board_burner_profile.co_limit_ppm,
+        .co_valid=analog.co_valid,.co_calibrated=board_analog_calibration.calibrated,.co_ppm=analog.co_ppm,.co_limit_ppm=b.co_limit_ppm,
         .co_accept_ppm=board_burner_profile.co_accept_ppm,.co2_valid=co2->valid,.co2_link_stale=co2->link_stale,
         .co2_ppm=co2->ppm,.target_ppm=b.co2_target_ppm};
     HmiHome_Apply(&page_view,&home);
@@ -572,12 +667,29 @@ static void CaptureMenu(void)
     menu_view.width=480;menu_view.height=320;
     menu_view.background=0x0841;menu_view.line_count=10;menu_view.columns=46;
     bool service=navigation.page==UI_PAGE_SERVICE;
-    snprintf(menu_view.header,64,"%s",service?"SERVICE / REFERENCE":"SETTINGS / CONTROL");
+    bool fan=navigation.page==UI_PAGE_FAN;
+    snprintf(menu_view.header,64,"%s",fan?"FAN CCR / RPM MEASUREMENT":service?"SERVICE / REFERENCE":"SETTINGS / CONTROL");
     snprintf(menu_view.status,64,"%s",menu_message[0]?menu_message:service?"Confirm EXHAUST only at physical exhaust endpoint":"Values saved in RAM; safety profile separate");
     snprintf(menu_view.footer,64,"UP/DN select | OK apply | Cancel back");
     BurnerAppSnapshot b;BurnerApp_GetSnapshot(&b);
-    if(service) {
-        const char *labels[]={"Motor +16 pulses (exhaust direction)","Motor -16 pulses (greenhouse direction)","STOP motor / clear reference","Test buzzer 300ms","Confirm physically at EXHAUST","Acknowledge fault","Return to Home"};
+    if(fan) {
+        BoardActuationSnapshot act;BoardActuation_Get(&act);
+        unsigned ccr=navigation.editing&&navigation.focus==0U?navigation.fan_draft:navigation.fan_ccr;
+        unsigned low=navigation.editing&&navigation.focus==1U?navigation.fan_draft:navigation.fan_min;
+        unsigned high=navigation.editing&&navigation.focus==2U?navigation.fan_draft:navigation.fan_max;
+        snprintf(menu_view.lines[0],64,"%c Selected CCR: %u",navigation.focus==0?'>':' ',ccr);
+        snprintf(menu_view.lines[1],64,"%c Minimum CCR: %u",navigation.focus==1?'>':' ',low);
+        snprintf(menu_view.lines[2],64,"%c Maximum CCR: %u",navigation.focus==2?'>':' ',high);
+        snprintf(menu_view.lines[3],64,"%c STOP FAN",navigation.focus==3?'>':' ');
+        snprintf(menu_view.lines[4],64,"%c Return to Settings",navigation.focus==4?'>':' ');
+        snprintf(menu_view.lines[6],64,"Applied CCR=%u / %s / ZC=%u",act.fan_ccr,act.fan_tuning?"TEST ACTIVE":"OFF",act.fan_sync);
+        snprintf(menu_view.lines[7],64,"RPM: external measurement; report with CCR");
+        snprintf(menu_view.lines[8],64,"UP +50 / DOWN -50 while editing");
+        snprintf(menu_view.lines[9],64,"1000=OFF; limits in RAM; test max 120s");
+        snprintf(menu_view.status,64,"%s",menu_message[0]?menu_message:"Fan only / IDLE / relays OFF / limits 0..1000");
+        snprintf(menu_view.footer,64,"OK edit/apply | Cancel discard/back");
+    } else if(service) {
+        const char *labels[]={"Motor +160 pulses (exhaust direction)","Motor -160 pulses (greenhouse direction)","STOP motor / clear reference","Test ALL relays 3s (OK stops)","Confirm physically at EXHAUST","Acknowledge fault","Return to Home"};
         for(unsigned i=0;i<7;++i)snprintf(menu_view.lines[i],64,"%c %s",navigation.focus==i?'>':' ',labels[i]);
         BoardActuationSnapshot act;BoardActuation_Get(&act);
         snprintf(menu_view.lines[8],64,"POS=%ld REF=%u HALL=%u MOVE=%u FLT=%u",(long)DamperStepper_GetPosition(),act.referenced,(unsigned)(HAL_GPIO_ReadPin(HAL1_OPEN_GPIO_Port,HAL1_OPEN_Pin)==GPIO_PIN_RESET),act.moving,act.fault);
@@ -587,8 +699,8 @@ static void CaptureMenu(void)
         unsigned co2=navigation.editing&&navigation.focus==1?navigation.draft_co2:b.co2_target_ppm;
         snprintf(menu_view.lines[0],64,"%c Mode: %s",navigation.focus==0?'>':' ',auto_mode?"AUTO":"MANUAL");
         snprintf(menu_view.lines[1],64,"%c CO2 target: %u ppm",navigation.focus==1?'>':' ',co2);
-        const char *labels[]={"Request START","Request STOP","Hardware service","Return to Home"};
-        for(unsigned i=0;i<4;++i)snprintf(menu_view.lines[i+2],64,"%c %s",navigation.focus==i+2?'>':' ',labels[i]);
+        const char *labels[]={"Request START","Request STOP","Hardware service","Fan CCR / RPM tuning","Return to Home"};
+        for(unsigned i=0;i<5;++i)snprintf(menu_view.lines[i+2],64,"%c %s",navigation.focus==i+2?'>':' ',labels[i]);
         snprintf(menu_view.lines[8],64,"%s",navigation.editing?"EDIT: OK save / Cancel discard":"Hold OK 5s: diagnostics");
         snprintf(menu_view.lines[9],64,"%s / %s",b.configured?"PROFILE OK":"CONFIG REQUIRED",Burner_StateText(b.state));
     }
@@ -633,12 +745,17 @@ static void Display(uint32_t now,const CO2_Snapshot *co2)
     new_page=new_page||painted_kind!=kind;
 #endif
     if(diag.open) {
-        char status[HMI_DIAG_COLUMNS];HC595_Diagnostics bus;HC595_GetDiagnostics(&bus);
-        snprintf(status,sizeof(status),"SPI2:%u Q:%02X/%02X NRF:%u H:%u F:%u Z:%u",
-            (unsigned)bus.state,bus.shadow,bus.latched,radio.ready,
-            HAL_GPIO_ReadPin(HAL1_OPEN_GPIO_Port,HAL1_OPEN_Pin)==GPIO_PIN_SET,
-            HAL_GPIO_ReadPin(Flame_Detector_GPIO_Port,Flame_Detector_Pin)==GPIO_PIN_SET,
-            HAL_GPIO_ReadPin(zc_GPIO_Port,zc_Pin)==GPIO_PIN_SET);
+        char status[HMI_DIAG_COLUMNS];
+#if !defined(FW_FINAL_APPLICATION)
+        HC595_Diagnostics bus;HC595_GetDiagnostics(&bus);
+#endif
+#if defined(FW_FINAL_APPLICATION)
+        BurnerAppSnapshot ds;BurnerApp_GetSnapshot(&ds);
+        BoardActuationSnapshot da;BoardActuation_Get(&da);
+        snprintf(status,sizeof(status),"%s | %s | %s",Burner_StateText(ds.state),Burner_FaultText(ds.fault),da.inhibited?"OUTPUT INHIBITED":"OUTPUT PERMITTED");
+#else
+        snprintf(status,sizeof(status),"MONITOR | SPI2 errors=%lu",(unsigned long)bus.errors);
+#endif
         const HmiFont *diag_font=font;
 #if defined(FW_FINAL_APPLICATION)
         diag_font=HmiPagesDma_CachedFont(&page_dma,font);

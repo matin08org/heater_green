@@ -6,6 +6,37 @@
 static bool Elapsed(uint32_t now, uint32_t then, uint32_t duration)
 { return (uint32_t)(now - then) >= duration; }
 static bool Duration(uint32_t ms) { return ms > 0U && ms < INT32_MAX; }
+static uint32_t Remaining(uint32_t now,uint32_t start,uint32_t duration)
+{uint32_t elapsed=now-start;return elapsed>=duration?0U:duration-elapsed;}
+void Burner_GetTiming(const BurnerControl *b,uint32_t now,BurnerTiming *out)
+{
+    memset(out,0,sizeof(*out));out->state_elapsed_ms=now-b->state_ms;
+    uint32_t duration=0,start=b->state_ms;
+    if(b->state==BURNER_PURGE||b->state==BURNER_INTERPURGE) {
+        out->purge_counting=b->tracking_purge;
+        duration=b->tracking_purge?(b->state==BURNER_PURGE?b->config.purge_ms:b->config.interpurge_ms):b->config.airflow_timeout_ms;
+        if(b->tracking_purge)start=b->purge_ms;
+    } else if(b->state==BURNER_IGNITION_1||b->state==BURNER_IGNITION_2)duration=b->config.ignition_ms;
+    else if(b->state==BURNER_POSTPURGE)duration=b->config.postpurge_ms;
+    else if(b->state==BURNER_LOCKOUT&&b->fault_purge_active){duration=b->config.postpurge_ms;start=b->fault_ms;}
+    out->state_timer_active=duration!=0;
+    out->state_remaining_ms=Remaining(now,start,duration);
+    if(b->state!=BURNER_RUNNING)return;
+    start=b->sample_ms;duration=0;
+    switch(b->sample_state) {
+    case SAMPLE_WAIT_BYPASS:duration=b->config.damper_timeout_ms;break;
+    case SAMPLE_WAIT_TEMPERATURE:start=b->sample_cycle_ms;duration=b->config.initial_measure_delay_ms;break;
+    case SAMPLE_VALVE_1:duration=b->config.sample_fill_ms;break;
+    case SAMPLE_COOLING:duration=b->config.cooling_timeout_ms;break;
+    case SAMPLE_VALVE_2:duration=b->config.sample_transfer_ms;break;
+    case SAMPLE_WAIT_CO:duration=b->config.co_timeout_ms;break;
+    case SAMPLE_AIR_SETTLE:duration=b->config.air_settle_ms;break;
+    case SAMPLE_ACCEPTED:duration=b->config.sample_period_ms;break;
+    default:break;
+    }
+    out->sample_timer_active=duration!=0;
+    out->sample_remaining_ms=Remaining(now,start,duration);
+}
 bool Burner_ParametersValid(const BurnerConfig *c)
 {
     return c && c->purge_ms >= 30000U &&

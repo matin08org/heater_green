@@ -19,6 +19,8 @@ typedef struct {
     BurnerSampleState sample_state;
     uint8_t air_percent,air_adjustments;
     bool bypass_proven,process_proven,stopped_proven;
+    BurnerTiming timing;
+    uint16_t co_accept_ppm,co_limit_ppm,co_trip_ppm;
 } BurnerAppSnapshot;
 /* Call after App_Init + ui_init. All commands/process calls have one main
  * context owner. IRQ/other task consumers may copy the published snapshot.

@@ -5,8 +5,9 @@
 #include "DiagLog.h"
 #define HMI_DIAG_LINES 16U
 #define HMI_DIAG_COLUMNS 64U
-typedef enum {HMI_DIAG_LOG,HMI_DIAG_INPUTS,HMI_DIAG_OUTPUTS,HMI_DIAG_ADC,
-    HMI_DIAG_SENSORS,HMI_DIAG_COMMS,HMI_DIAG_PROCESS,HMI_DIAG_SYSTEM,HMI_DIAG_SECTIONS} HmiDiagSection;
+/* Ordered by service priority; raw engineering data is deliberately last. */
+typedef enum {HMI_DIAG_SUMMARY,HMI_DIAG_LOG,HMI_DIAG_OUTPUTS,HMI_DIAG_SENSORS,
+    HMI_DIAG_COMMS,HMI_DIAG_INPUTS,HMI_DIAG_ADC,HMI_DIAG_SYSTEM,HMI_DIAG_SECTIONS} HmiDiagSection;
 typedef struct {
     bool open, live;
     uint16_t scroll;

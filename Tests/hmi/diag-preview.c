@@ -6,6 +6,7 @@ int main(int argc,char **argv)
 {
     assert(argc==2);DiagLog_Init();HmiDiag diag;HmiDiag_Init(&diag);
     HmiDiag_Key(&diag,KEY_DEBUG);
+    HmiDiag_Key(&diag,KEY_OK); /* EVENTS follows SUMMARY. */
     DiagLog_Write(100,DIAG_INFO,"BOOT","CPU: internal Flash; LCD: SPI DMA 16MHz");
     DiagLog_Write(110,DIAG_INFO,"KEY","OK held 5s -> DIAG; Cancel -> HOME");
     DiagLog_Write(120,DIAG_INFO,"ADC","TIM5 -> ADC1 scan -> circular DMA");

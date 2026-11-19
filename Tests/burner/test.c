@@ -225,9 +225,43 @@ static void AdaptiveFreshness(void)
     in.flame_temp_q4=4001;b.sample_state=SAMPLE_COOLING;
     assert(CombustionCycle_Process(&b,&in,2000)==BURNER_TEMPERATURE);
 }
+static void MissingTemperatureAtEntry(void)
+{
+    BurnerControl b={0};BurnerInputs in=Safe();
+    b.config.damper_timeout_ms=15000;b.config.initial_measure_delay_ms=60000;
+    b.config.max_adjustments=5;
+    in.bypass_proven=true;in.flame_temp_valid=false;
+    assert(CombustionCycle_Process(&b,&in,0)==BURNER_NO_FAULT);
+    assert(b.sample_state==SAMPLE_WAIT_TEMPERATURE);
+    assert(CombustionCycle_Process(&b,&in,60000)==BURNER_NO_FAULT);
+    assert(b.sample_state==SAMPLE_WAIT_TEMPERATURE&&!b.out.sample_valve_1&&
+        !b.out.sample_valve_2&&!b.out.distribution_fan&&b.out.damper==DAMPER_BYPASS);
+    in.flame_temp_valid=true;
+    assert(CombustionCycle_Process(&b,&in,60001)==BURNER_NO_FAULT&&b.out.sample_valve_1);
+}
+static void DiagnosticTiming(void)
+{
+    BurnerControl b={0};b.config=Config();BurnerTiming t;
+    b.state=BURNER_PURGE;b.state_ms=1000;b.config.airflow_timeout_ms=5000;
+    Burner_GetTiming(&b,1100,&t);
+    assert(t.state_timer_active&&!t.purge_counting&&t.state_remaining_ms==4900);
+    b.tracking_purge=true;b.purge_ms=1050;
+    BurnerControl before=b;Burner_GetTiming(&b,1100,&t);
+    assert(!memcmp(&b,&before,sizeof(b))&&t.purge_counting&&t.state_remaining_ms==29950);
+    b.state_ms=b.purge_ms=UINT32_MAX-49U;Burner_GetTiming(&b,50,&t);
+    assert(t.state_elapsed_ms==100&&t.state_remaining_ms==29900);
+    b.state=BURNER_IGNITION_1;b.state_ms=0;Burner_GetTiming(&b,5001,&t);
+    assert(t.state_timer_active&&t.state_remaining_ms==0);
+    b.state=BURNER_RUNNING;b.sample_state=SAMPLE_COOLING;b.sample_ms=1000;
+    b.config.cooling_timeout_ms=600000;Burner_GetTiming(&b,2000,&t);
+    assert(!t.state_timer_active&&t.sample_timer_active&&t.sample_remaining_ms==599000);
+    b.state=BURNER_IDLE;Burner_GetTiming(&b,2000,&t);
+    assert(!t.state_timer_active&&!t.sample_timer_active);
+    puts("PASS diagnostic timing: purge wait/countdown, saturation, sample limit, read-only state and tick wrap");
+}
 int main(void)
 {
-    Readiness();AdaptiveFreshness();
+    Readiness();AdaptiveFreshness();MissingTemperatureAtEntry();DiagnosticTiming();
     BurnerConfig c=Config(); BurnerControl b; BurnerInputs in=Safe();
     assert(Burner_ConfigValid(&c)); c.commissioned=false;
     Burner_Init(&b,&c,0);

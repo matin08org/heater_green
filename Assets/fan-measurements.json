@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "source": "Owner measurements reported in chat on 2026-11-19",
+  "status": "partial_voltage_observations_not_an_airflow_or_rpm_calibration",
+  "instrument_type": null,
+  "measurements": [
+    { "ccr": 0, "voltage_vac": 233, "running": null, "rpm": null },
+    { "ccr": 100, "voltage_vac": 233, "running": null, "rpm": null },
+    { "ccr": 200, "voltage_vac": 191, "running": null, "rpm": null },
+    { "ccr": 250, "voltage_vac": null, "running": true, "starts_from_rest": true, "rpm": null },
+    { "ccr": 300, "voltage_vac": 60, "running": false, "rpm": null },
+    { "ccr": 400, "voltage_vac": 0, "running": false, "rpm": null }
+  ]
+}

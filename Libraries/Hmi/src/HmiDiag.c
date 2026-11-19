@@ -10,7 +10,7 @@ bool HmiDiag_Key(HmiDiag *d, KeyCode key)
 {
     if (!d) return false;
     if (key==KEY_DEBUG && !d->open) {
-        d->open=true;d->live=true;d->scroll=0;d->section=HMI_DIAG_LOG;d->seen_sequence=DiagLog_Sequence();
+        d->open=true;d->live=true;d->scroll=0;d->section=HMI_DIAG_SUMMARY;d->seen_sequence=DiagLog_Sequence();
         ++d->revision;return true;
     }
     if (!d->open) return false;
@@ -58,7 +58,8 @@ HmiResult HmiDiag_Capture(HmiDiag *d,HmiDiagView *v,const HmiFont *font,
     }
     memset(v,0,sizeof(*v));v->font=font;v->width=width;v->height=height;
     v->columns=(uint8_t)columns;v->line_count=(uint8_t)rows;v->background=0x0841U;
-    snprintf(v->header,sizeof(v->header),"SYSTEM DIAGNOSTICS | %s",d->live?"LIVE":"PAUSED");
+    static const char *names[]={"SUMMARY","EVENTS","OUTPUTS","SENSORS","COMMS","ADV GPIO","ADV ADC","ADV SYSTEM"};
+    snprintf(v->header,sizeof(v->header),"DIAG %u/%u | %s | %s",(unsigned)d->section+1U,HMI_DIAG_SECTIONS,names[d->section],d->live?"LIVE":"PAUSED");
     snprintf(v->status,sizeof(v->status),"%.*s",(int)columns,status?status:"");
     snprintf(v->footer,sizeof(v->footer),"OK next | UP/DN scroll | CANCEL home");
     if(d->section!=HMI_DIAG_LOG)return HMI_OK;

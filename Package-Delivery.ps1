@@ -15,12 +15,12 @@ if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Release/FinalV1/Scenario')) 
 if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Release/FinalV1/HomePanels')) {
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Release/FinalV1/HomePanels') -Destination $taskRelease -Recurse
 }
-foreach($taskFile in @('Program-Final.ps1','Flash-Verify.ps1','Debug-Adc.ps1','Run-Scenario.ps1','STM32F412_W25Q16_V1.0_QSPI_1MHz.stldr','STM32F412_W25Q16_V1.0_QSPI_250kHz.stldr')) {
+foreach($taskFile in @('Program-Final.ps1','Flash-Verify.ps1','STM32F412_W25Q16_V1.0_QSPI_1MHz.stldr','STM32F412_W25Q16_V1.0_QSPI_250kHz.stldr')) {
  Copy-Item -LiteralPath (Join-Path $PSScriptRoot $taskFile) -Destination $taskPackage
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination $taskPackage
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Docs') -Destination $taskPackage -Recurse
-$taskReadme="Engineering handover: real-input firmware; current profile PHYSICAL_INHIBITED.`nRead README.md and Docs/Status.md. Runtime simulation and test arming are removed.`nFile-only check: .\Program-Final.ps1 -CheckOnly`nProgramming matching CPU/assets: .\Program-Final.ps1`nHost scenario checks: .\Run-Scenario.ps1`nPackaging does not connect to or program hardware."
+$taskReadme="Engineering handover: real-input firmware; current profile PHYSICAL_INHIBITED.`nRead README.md and Docs/Status.md. Runtime simulation and test arming are removed.`nFile-only check: .\Program-Final.ps1 -CheckOnly`nProgramming matching CPU/assets: .\Program-Final.ps1`nHost scenario checks: .\Tests\scenario\run.ps1`nPackaging does not connect to or program hardware."
 [IO.File]::WriteAllText((Join-Path $taskPackage 'DELIVERY-README.txt'),$taskReadme)
 & (Join-Path $taskPackage 'Program-Final.ps1') -CheckOnly
 $taskHashes=Get-ChildItem -LiteralPath $taskPackage -File -Recurse | Sort-Object FullName | ForEach-Object {

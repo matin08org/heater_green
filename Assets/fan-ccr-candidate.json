@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "status": "provisional_command_mapping_not_measured_rpm_or_airflow",
+  "calibrated": false,
+  "basis": "Owner confirms startup from rest at CCR 250, stopped at CCR 300, and zero output voltage at CCR 400. CCR 0 and 100 both measured 233 VAC; equal RPM has not been established.",
+  "off_ccr": 1000,
+  "minimum_drive_ccr": 250,
+  "maximum_drive_ccr": 0,
+  "interpolation": "CCR rounded from 250 * (100 - level) / 90 for levels 10..100. Levels are command labels, not measured speed or airflow percentages.",
+  "fan_ccr_by_10_percent": [1000, 250, 222, 194, 167, 139, 111, 83, 56, 28, 0],
+  "applied_to_board_profile": true,
+  "runtime_flag_enabled_by_owner_request": true,
+  "runtime_flag_note": "board.json fan_calibrated is enabled by owner request; physical RPM/airflow calibration is still unverified."
+}

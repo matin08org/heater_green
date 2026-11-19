@@ -90,6 +90,11 @@ typedef struct {
     uint32_t sample_cycle_ms;
     uint8_t sample_attempts;
 } BurnerControl;
+typedef struct {
+    uint32_t state_elapsed_ms,state_remaining_ms,sample_remaining_ms;
+    bool state_timer_active,sample_timer_active,purge_counting;
+} BurnerTiming;
+void Burner_GetTiming(const BurnerControl *b,uint32_t now,BurnerTiming *out);
 
 bool Burner_ConfigValid(const BurnerConfig *c);
 bool Burner_ParametersValid(const BurnerConfig *c);

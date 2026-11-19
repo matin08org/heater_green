@@ -88,7 +88,7 @@ static void Navigation(void)
     UiNavigation_Key(&n,KEY_DOWN,false,800);
     assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_MOTOR_STOP);
     UiNavigation_Key(&n,KEY_DOWN,false,800);
-    assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_BEEP);
+    assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_RELAY_TEST);
     UiNavigation_Key(&n,KEY_DOWN,false,800);
     assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_CONFIRM_EXHAUST);
     UiNavigation_Key(&n,KEY_DOWN,false,800);
@@ -113,6 +113,32 @@ static void Logs(void)
     assert(DiagLog_Read(127,&e) && strlen(e.text)==DIAG_LOG_MESSAGE-1U && strlen(e.tag)==7U);
     DiagLog_Write(300,DIAG_INFO,"SYS","x\ny\tz");
     assert(DiagLog_Read(127,&e) && !strcmp(e.text,"x y z"));
+}
+static void FanNavigation(void)
+{
+ UiNavigation n;UiNavigation_Init(&n);n.page=UI_PAGE_SETTINGS;n.focus=5;
+ assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_PAGE&&n.page==UI_PAGE_FAN);
+ assert(n.fan_ccr==1000&&n.fan_min==0&&n.fan_max==1000);
+ UiNavigation_Key(&n,KEY_OK,false,800);assert(n.editing);
+ UiNavigation_Key(&n,KEY_DOWN,false,800);assert(n.fan_draft==950);
+ UiNavigation_Key(&n,KEY_CANCEL,false,800);assert(!n.editing&&n.fan_ccr==1000);
+ n.focus=2;UiNavigation_Key(&n,KEY_OK,false,800);
+ for(unsigned i=0;i<12;i++)UiNavigation_Key(&n,KEY_DOWN,false,800);
+ assert(n.fan_draft==400);
+ assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_FAN_LIMITS&&n.fan_max==400&&n.fan_ccr==400);
+ n.focus=1;UiNavigation_Key(&n,KEY_OK,false,800);
+ for(unsigned i=0;i<20;i++)UiNavigation_Key(&n,KEY_UP,false,800);
+ assert(n.fan_draft==350); /* minimum stays below maximum */
+ assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_FAN_LIMITS&&n.fan_min==350);
+ n.focus=0;UiNavigation_Key(&n,KEY_OK,false,800);
+ UiNavigation_Key(&n,KEY_DOWN,false,800);UiNavigation_Key(&n,KEY_DOWN,false,800);
+ assert(n.fan_draft==350);
+ assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_FAN_APPLY&&n.fan_ccr==350);
+ n.focus=3;assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_FAN_OFF);
+ n.focus=4;assert(UiNavigation_Key(&n,KEY_OK,false,800)==NAV_PAGE&&n.page==UI_PAGE_SETTINGS);
+ n.page=UI_PAGE_FAN;n.editing=true;
+ assert(UiNavigation_Key(&n,KEY_DEBUG,false,800)==NAV_PAGE&&!n.editing&&n.page==UI_PAGE_DEBUG);
+ puts("PASS fan menu: 50-count edits, transactional cancel, min/max constraints, clamping, apply/OFF/back and DIAG exit");
 }
 static void HomeCommands(void)
 {
@@ -146,7 +172,7 @@ static void HomeCommands(void)
 }
 int main(void)
 {
-    Keys(0); Keys(UINT32_MAX-2000U); Navigation(); HomeCommands();Logs();
+    Keys(0); Keys(UINT32_MAX-2000U); Navigation(); HomeCommands();Logs();FanNavigation();
     puts("PASS: key bounce/repeat/5s hold/boot guard/gap/wrap; Home RUN/STOP; transactional Settings; bounded logs");
     return 0;
 }

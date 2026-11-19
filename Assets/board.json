@@ -31,8 +31,8 @@
     "co2_hysteresis_ppm": 100
   },
   "actuation": {
-    "fan_calibrated": false,
-    "fan_ccr_by_10_percent": null,
+    "fan_calibrated": true,
+    "fan_ccr_by_10_percent": [1000, 250, 222, 194, 167, 139, 111, 83, 56, 28, 0],
     "damper_travel_pulses": 1600,
     "damper_timeout_ms": 15000,
     "damper_rpm": 30,

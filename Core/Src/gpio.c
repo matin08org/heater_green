@@ -101,7 +101,7 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin : Flame_Detector_Pin */
   GPIO_InitStruct.Pin = Flame_Detector_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(Flame_Detector_GPIO_Port, &GPIO_InitStruct);
 
   /* PA9 / ZC starts high-impedance with no bias; TIM1 later selects AF input. */

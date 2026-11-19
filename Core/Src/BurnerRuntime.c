@@ -54,6 +54,8 @@ static void Publish(void)
         .sample_state=visible->sample_state,.air_percent=visible->out.air_percent,.air_adjustments=visible->air_adjustments,
         .bypass_proven=inputs.bypass_proven,.process_proven=inputs.process_proven,
         .stopped_proven=visible->state==BURNER_IDLE&&inputs.fuel_off_proven&&inputs.ignition_off_proven&&inputs.fan_stopped_proven};
+    Burner_GetTiming(visible,HAL_GetTick(),&s.timing);
+    s.co_accept_ppm=visible->config.co_accept_ppm;s.co_limit_ppm=visible->config.co_limit_ppm;s.co_trip_ppm=visible->config.co_trip_ppm;
     uint32_t mask=__get_PRIMASK();__disable_irq();published=s;__set_PRIMASK(mask);
 }
 void BurnerApp_GetSnapshot(BurnerAppSnapshot *out)
@@ -138,6 +140,8 @@ void BurnerApp_ServiceInputs(const MAX6675_Snapshot_t *tc,const CO2_Snapshot *co
 void BurnerApp_Process(const MAX6675_Snapshot_t *tc,const CO2_Snapshot *co2) {BurnerApp_ServiceInputs(tc,co2);}
 BurnerCommandResult BurnerApp_Start(BurnerSource source)
 {
+    BoardActuation_StopFanTuning();
+    BoardActuation_StopRelayTest();
     BoardActuationSnapshot act;BoardActuation_Get(&act);
     uint32_t blockers=StartBlockers(&act,HAL_GetTick());
 #if BURNER_START_OVERRIDE
@@ -160,7 +164,8 @@ BurnerCommandResult BurnerApp_Start(BurnerSource source)
     DiagLog_Write(HAL_GetTick(),last_start==BURNER_COMMAND_ACCEPTED?DIAG_INFO:DIAG_WARN,"CMD","START source=%u result=%u",(unsigned)source,(unsigned)last_start);return last_start;
 }
 void BurnerApp_Stop(BurnerSource source)
-{if(source==BURNER_HMI||source==BURNER_PLC)auto_armed=false;
+{BoardActuation_StopFanTuning();BoardActuation_StopRelayTest();
+ if(source==BURNER_HMI||source==BURNER_PLC)auto_armed=false;
  Burner_RequestStop(&burner,source,HAL_GetTick());
  /* Queue fuel/ignition OFF immediately, retaining only the sequencer's fan
   * request. Actual shared-SPI latch is asynchronous, not a hardware cutoff. */

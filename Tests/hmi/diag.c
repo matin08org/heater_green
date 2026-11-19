@@ -13,7 +13,7 @@ static void Navigation(uint32_t start)
     KeyInput_Init(&keys,now);Advance(&keys,0,80);KeyCode key;
     Advance(&keys,KEY_MASK(KEY_OK),5030);assert(!KeyInput_Read(&keys,&key));
     Advance(&keys,KEY_MASK(KEY_OK),10);assert(KeyInput_Read(&keys,&key)&&key==KEY_DEBUG);
-    assert(HmiDiag_Key(&diag,key)&&diag.open&&diag.section==HMI_DIAG_LOG);
+    assert(HmiDiag_Key(&diag,key)&&diag.open&&diag.section==HMI_DIAG_SUMMARY);
     KeyInput_RequireRelease(&keys);Advance(&keys,KEY_MASK(KEY_OK),6000);assert(!KeyInput_Read(&keys,&key));
     Advance(&keys,0,80);assert(keys.armed&&!KeyInput_Read(&keys,&key));
     for(unsigned section=1;section<HMI_DIAG_SECTIONS;++section) {
@@ -24,7 +24,7 @@ static void Navigation(uint32_t start)
     Advance(&keys,KEY_MASK(KEY_CANCEL),50);Advance(&keys,0,50);
     assert(KeyInput_Read(&keys,&key)&&key==KEY_CANCEL);
     assert(HmiDiag_Key(&diag,key)&&!diag.open);
-    assert(HmiDiag_Key(&diag,KEY_DEBUG)&&diag.section==HMI_DIAG_LOG);
+    assert(HmiDiag_Key(&diag,KEY_DEBUG)&&diag.section==HMI_DIAG_SUMMARY);
 }
 static void LogsAndRender(void)
 {
@@ -32,9 +32,11 @@ static void LogsAndRender(void)
     HmiFont font={pixels,sizeof(pixels),32,126,5,7,6,8,1,0};
     HmiDiag diag;HmiDiag_Init(&diag);DiagLog_Init();
     assert(HmiDiag_Key(&diag,KEY_DEBUG));
+    assert(!HmiDiag_Key(&diag,KEY_OK)&&diag.section==HMI_DIAG_LOG);
     DiagLog_Write(100,DIAG_ERROR,"SPI2","Long error message that must wrap instead of hiding essential fields at the right side of the terminal");
     HmiDiagView v,copy;
     assert(HmiDiag_Capture(&diag,&v,&font,120,160,"SPI=ERROR")==HMI_OK);
+    assert(strstr(v.header,"2/8")&&strstr(v.header,"EVENTS"));
     unsigned lines=0;for(unsigned i=0;i<v.line_count;++i)if(v.lines[i][0]) {++lines;assert(v.levels[i]==DIAG_ERROR);}
     assert(lines>1);
     copy=v;
@@ -56,7 +58,7 @@ static void LogsAndRender(void)
     assert(HmiDiag_Capture(&diag,&v,&font,10,10,NULL)==HMI_INVALID);
     for(unsigned i=0;i<200;++i)DiagLog_Write(i,DIAG_DEBUG,"TC","value=%u",i);
     assert(DiagLog_Overwritten()>0);
-    (void)HmiDiag_Key(&diag,KEY_OK);assert(diag.section==HMI_DIAG_INPUTS);
+    (void)HmiDiag_Key(&diag,KEY_OK);assert(diag.section==HMI_DIAG_OUTPUTS);
     for(unsigned i=0;i<50;++i)(void)HmiDiag_Key(&diag,KEY_UP);
     assert(HmiDiag_Capture(&diag,&v,&font,120,160,NULL)==HMI_OK && diag.scroll>=50);
 }

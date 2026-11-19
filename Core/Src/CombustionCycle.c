@@ -21,7 +21,9 @@ static BurnerFault Adjust(BurnerControl *b,int direction,uint16_t co,uint32_t no
 BurnerFault CombustionCycle_Process(BurnerControl *b,const BurnerInputs *in,uint32_t now)
 {
     const BurnerConfig *c=&b->config;
-    if(!in->flame_temp_valid)return BURNER_INPUT_STALE;
+    /* Owner request: do not trip on missing TC1 at RUNNING entry.
+     * SAMPLE_WAIT_TEMPERATURE still waits for a valid temperature. */
+    /* if(!in->flame_temp_valid)return BURNER_INPUT_STALE; */
     if(in->flame_temp_q4>4000)return BURNER_TEMPERATURE;
     bool temp_ok=in->flame_temp_valid&&in->flame_temp_q4>=2800&&in->flame_temp_q4<=4000;
     if(b->sample_state==SAMPLE_IDLE) {
